@@ -45,4 +45,4 @@ Currently, the game uses placeholder assets. You'll need to replace these with a
 - Implement score system
 - Add power-ups
 - Create better animations
-- Add sound effects for actions 
+- Add sound effects for actions

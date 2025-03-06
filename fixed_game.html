@@ -40,9 +40,11 @@
     <div class="instructions">
         <h2>Controls:</h2>
         <ul>
-            <li>Arrow Keys: Move left/right and jump</li>
-            <li>Spacebar: Attack</li>
+            <li>Left/Right Arrow Keys: Move left/right</li>
+            <li>Up Arrow Key OR Spacebar: Jump</li>
         </ul>
+        <p>Note: Open your browser's developer console (F12 or Cmd+Option+I) to see debug messages</p>
+        <button id="jumpButton" style="padding: 10px 20px; font-size: 18px; margin-top: 10px;">JUMP!</button>
     </div>
     
     <!-- Empty div for game canvas -->
@@ -92,7 +94,9 @@
             let healthText;
             let currentScreen = 1;
             let totalScreens = 5;
-            let attackKey;
+            let jumpKey;
+            let invincible = false;
+            let invincibleTimer = null;
             
             // Initialize the game
             try {
@@ -133,38 +137,26 @@
                 player.setBounce(0.2);
                 player.setCollideWorldBounds(true);
                 
-                // Player animations
-                this.anims.create({
-                    key: 'left',
-                    frames: [
-                        { key: 'player', frame: 'left1' },
-                        { key: 'player', frame: 'left2' }
-                    ],
-                    frameRate: 10,
-                    repeat: -1
+                // Set up keyboard input
+                cursors = this.input.keyboard.createCursorKeys();
+                
+                // Add jump key for more reliable jumping
+                jumpKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.UP);
+                jumpKey.on('down', function() {
+                    console.log('UP key pressed, on ground:', player.body.touching.down);
+                    if (player.body.touching.down || player.body.blocked.down) {
+                        player.setVelocityY(-330);
+                        console.log('Jump executed!');
+                    }
                 });
                 
-                this.anims.create({
-                    key: 'turn',
-                    frames: [{ key: 'player', frame: 'idle' }],
-                    frameRate: 20
-                });
-                
-                this.anims.create({
-                    key: 'right',
-                    frames: [
-                        { key: 'player', frame: 'right1' },
-                        { key: 'player', frame: 'right2' }
-                    ],
-                    frameRate: 10,
-                    repeat: -1
-                });
-                
-                this.anims.create({
-                    key: 'attack',
-                    frames: [{ key: 'player', frame: 'attack' }],
-                    frameRate: 15,
-                    repeat: 0
+                // Add jump button click handler
+                document.getElementById('jumpButton').addEventListener('click', function() {
+                    console.log('Jump button clicked, on ground:', player.body.touching.down);
+                    if (player.body.touching.down || player.body.blocked.down) {
+                        player.setVelocityY(-330);
+                        console.log('Jump executed from button!');
+                    }
                 });
                 
                 // Set up collisions
@@ -187,7 +179,7 @@
                 // Set up enemy collisions
                 this.physics.add.collider(enemies, platforms);
                 
-                // Final boss (not visible until reaching final screen)
+                // Final boss
                 boss = this.physics.add.sprite(700, 200, 'boss');
                 boss.setVisible(false);
                 boss.setActive(false);
@@ -204,10 +196,6 @@
                     fill: '#fff'
                 }).setOrigin(0.5, 0);
                 
-                // Set up keyboard input
-                cursors = this.input.keyboard.createCursorKeys();
-                attackKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-                
                 // Collisions between player and enemies
                 this.physics.add.overlap(player, enemies, hitEnemy, null, this);
                 this.physics.add.overlap(player, boss, hitBoss, null, this);
@@ -218,34 +206,44 @@
             // Update game state
             function update() {
                 if (gameOver) {
+                    // If game over, stop all player movement
+                    player.setVelocityX(0);
                     return;
                 }
                 
-                // Player movement
+                // Debug ground detection
+                if (player.body.touching.down || player.body.blocked.down) {
+                    if (!player.wasOnGround) {
+                        console.log('Player is now on ground!');
+                        player.wasOnGround = true;
+                    }
+                } else {
+                    if (player.wasOnGround) {
+                        console.log('Player is now in air!');
+                        player.wasOnGround = false;
+                    }
+                }
+                
+                // Player movement - allow movement regardless of damage state
                 if (cursors.left.isDown) {
                     player.setVelocityX(-160);
-                    player.anims.play('left', true);
+                    player.flipX = true;
                 } else if (cursors.right.isDown) {
                     player.setVelocityX(160);
-                    player.anims.play('right', true);
+                    player.flipX = false;
                 } else {
                     player.setVelocityX(0);
-                    player.anims.play('turn');
                 }
                 
-                // Jump
-                if (cursors.up.isDown && player.body.touching.down) {
+                // Alternative jump method through update
+                if ((cursors.up.isDown || cursors.space.isDown) && 
+                    (player.body.touching.down || player.body.blocked.down)) {
                     player.setVelocityY(-330);
-                }
-                
-                // Attack
-                if (Phaser.Input.Keyboard.JustDown(attackKey)) {
-                    player.anims.play('attack', true);
+                    console.log('Jump through update!');
                 }
                 
                 // Update enemies
                 enemies.getChildren().forEach(enemy => {
-                    // Simple AI: change direction when hitting bounds
                     if (enemy.body.touching.right || enemy.body.blocked.right) {
                         enemy.setVelocityX(-50);
                     } else if (enemy.body.touching.left || enemy.body.blocked.left) {
@@ -258,7 +256,6 @@
                     currentScreen++;
                     player.x = 20;
                     
-                    // If final screen, show the boss
                     if (currentScreen === totalScreens) {
                         enemies.clear(true, true);
                         boss.setVisible(true);
@@ -269,17 +266,45 @@
             
             // Handle collision with enemies
             function hitEnemy(player, enemy) {
-                if (player.anims.currentAnim.key !== 'attack') {
+                if (!invincible) {
                     takeDamage();
-                } else {
-                    enemy.disableBody(true, true);
+                    
+                    // Make player temporarily invincible
+                    invincible = true;
+                    player.alpha = 0.5; // Visual feedback
+                    
+                    // Reset invincibility after 1 second
+                    if (invincibleTimer) {
+                        invincibleTimer.remove();
+                    }
+                    
+                    invincibleTimer = player.scene.time.delayedCall(1000, function() {
+                        invincible = false;
+                        player.alpha = 1; // Restore visibility
+                        console.log('Player can take damage again');
+                    });
                 }
             }
             
             // Handle collision with boss
             function hitBoss(player, boss) {
-                if (player.anims.currentAnim.key !== 'attack') {
+                if (!invincible) {
                     takeDamage();
+                    
+                    // Make player temporarily invincible
+                    invincible = true;
+                    player.alpha = 0.5; // Visual feedback
+                    
+                    // Reset invincibility after 1 second
+                    if (invincibleTimer) {
+                        invincibleTimer.remove();
+                    }
+                    
+                    invincibleTimer = player.scene.time.delayedCall(1000, function() {
+                        invincible = false;
+                        player.alpha = 1; // Restore visibility
+                        console.log('Player can take damage again');
+                    });
                 }
             }
             
@@ -287,116 +312,75 @@
             function takeDamage() {
                 health--;
                 healthText.setText('Health: ' + health);
+                console.log('Player took damage! Health: ' + health);
                 
                 if (health <= 0) {
                     gameOver = true;
                     player.setTint(0xff0000);
+                    console.log('Game over!');
                 }
             }
             
             // Create placeholder textures function
             function createPlaceholderTextures(scene) {
-                console.log('Creating placeholder textures');
-                
-                // Platform texture (brown rectangle)
-                const platformGraphics = scene.make.graphics({x: 0, y: 0, add: false});
-                platformGraphics.fillStyle(0x8B4513, 1); // Brown color
-                platformGraphics.fillRect(0, 0, 200, 32);
-                platformGraphics.generateTexture('platform', 200, 32);
-                
-                // Player atlas with frames
-                const playerGraphics = scene.make.graphics({x: 0, y: 0, add: false});
-                
-                // Idle frame (yellow rectangle with eyes)
-                playerGraphics.clear();
-                playerGraphics.fillStyle(0xFFD700, 1); // Gold color
-                playerGraphics.fillRect(0, 0, 32, 48);
-                playerGraphics.fillStyle(0x000000, 1); // Black for eyes
-                playerGraphics.fillRect(8, 12, 4, 4);
-                playerGraphics.fillRect(20, 12, 4, 4);
-                playerGraphics.strokeRect(0, 0, 32, 48);
-                playerGraphics.generateTexture('player_idle', 32, 48);
-                
-                // Left frame 1
-                playerGraphics.clear();
-                playerGraphics.fillStyle(0xFFD700, 1);
-                playerGraphics.fillRect(0, 0, 32, 48);
-                playerGraphics.fillStyle(0x000000, 1);
-                playerGraphics.fillRect(6, 12, 4, 4);
-                playerGraphics.fillRect(18, 12, 4, 4);
-                playerGraphics.strokeRect(0, 0, 32, 48);
-                playerGraphics.generateTexture('player_left1', 32, 48);
-                
-                // Left frame 2
-                playerGraphics.clear();
-                playerGraphics.fillStyle(0xFFD700, 1);
-                playerGraphics.fillRect(0, 0, 32, 48);
-                playerGraphics.fillStyle(0x000000, 1);
-                playerGraphics.fillRect(6, 14, 4, 4);
-                playerGraphics.fillRect(18, 14, 4, 4);
-                playerGraphics.strokeRect(0, 0, 32, 48);
-                playerGraphics.generateTexture('player_left2', 32, 48);
-                
-                // Right frame 1
-                playerGraphics.clear();
-                playerGraphics.fillStyle(0xFFD700, 1);
-                playerGraphics.fillRect(0, 0, 32, 48);
-                playerGraphics.fillStyle(0x000000, 1);
-                playerGraphics.fillRect(10, 12, 4, 4);
-                playerGraphics.fillRect(22, 12, 4, 4);
-                playerGraphics.strokeRect(0, 0, 32, 48);
-                playerGraphics.generateTexture('player_right1', 32, 48);
-                
-                // Right frame 2
-                playerGraphics.clear();
-                playerGraphics.fillStyle(0xFFD700, 1);
-                playerGraphics.fillRect(0, 0, 32, 48);
-                playerGraphics.fillStyle(0x000000, 1);
-                playerGraphics.fillRect(10, 14, 4, 4);
-                playerGraphics.fillRect(22, 14, 4, 4);
-                playerGraphics.strokeRect(0, 0, 32, 48);
-                playerGraphics.generateTexture('player_right2', 32, 48);
-                
-                // Attack frame
-                playerGraphics.clear();
-                playerGraphics.fillStyle(0xFFD700, 1);
-                playerGraphics.fillRect(0, 0, 32, 48);
-                playerGraphics.fillStyle(0xFF0000, 1); // Red for attack
-                playerGraphics.fillRect(28, 20, 16, 8);
-                playerGraphics.strokeRect(0, 0, 32, 48);
-                playerGraphics.generateTexture('player_attack', 32, 48);
-                
-                // Set up player frames in a texture atlas
-                scene.textures.addFrame('player', 'idle', 0, 0, 32, 48, 'player_idle');
-                scene.textures.addFrame('player', 'left1', 0, 0, 32, 48, 'player_left1');
-                scene.textures.addFrame('player', 'left2', 0, 0, 32, 48, 'player_left2');
-                scene.textures.addFrame('player', 'right1', 0, 0, 32, 48, 'player_right1');
-                scene.textures.addFrame('player', 'right2', 0, 0, 32, 48, 'player_right2');
-                scene.textures.addFrame('player', 'attack', 0, 0, 32, 48, 'player_attack');
-                
-                // Enemies
-                // Red rat
-                const redRatGraphics = scene.make.graphics({x: 0, y: 0, add: false});
-                redRatGraphics.fillStyle(0xFF0000, 1);
-                redRatGraphics.fillCircle(16, 16, 16);
-                redRatGraphics.generateTexture('rat_red', 32, 32);
-                
-                // Blue rat
-                const blueRatGraphics = scene.make.graphics({x: 0, y: 0, add: false});
-                blueRatGraphics.fillStyle(0x0000FF, 1);
-                blueRatGraphics.fillCircle(16, 16, 16);
-                blueRatGraphics.generateTexture('rat_blue', 32, 32);
-                
-                // Boss
-                const bossGraphics = scene.make.graphics({x: 0, y: 0, add: false});
-                bossGraphics.fillStyle(0x800080, 1); // Purple
-                bossGraphics.fillRect(0, 0, 64, 64);
-                bossGraphics.fillStyle(0xFFFF00, 1); // Yellow
-                bossGraphics.fillRect(10, 10, 10, 10);
-                bossGraphics.fillRect(44, 10, 10, 10);
-                bossGraphics.generateTexture('boss', 64, 64);
-                
-                console.log('Placeholder textures created');
+                try {
+                    console.log('Creating placeholder textures');
+                    
+                    // Platform texture (brown rectangle)
+                    const platformGraphics = scene.make.graphics({x: 0, y: 0, add: false});
+                    platformGraphics.fillStyle(0x8B4513, 1); // Brown color
+                    platformGraphics.fillRect(0, 0, 200, 32);
+                    platformGraphics.generateTexture('platform', 200, 32);
+                    
+                    // Player texture (yellow rectangle with eyes)
+                    const playerGraphics = scene.make.graphics({x: 0, y: 0, add: false});
+                    
+                    // Normal state
+                    playerGraphics.fillStyle(0xFFD700, 1); // Gold color
+                    playerGraphics.fillRect(0, 0, 32, 48);
+                    playerGraphics.fillStyle(0x000000, 1); // Black for eyes
+                    playerGraphics.fillRect(8, 12, 4, 4);
+                    playerGraphics.fillRect(20, 12, 4, 4);
+                    playerGraphics.strokeRect(0, 0, 32, 48);
+                    playerGraphics.generateTexture('player', 32, 48);
+                    
+                    // Attack state
+                    playerGraphics.clear();
+                    playerGraphics.fillStyle(0xFFD700, 1); // Gold color
+                    playerGraphics.fillRect(0, 0, 32, 48);
+                    playerGraphics.fillStyle(0x000000, 1); // Black for eyes
+                    playerGraphics.fillRect(8, 12, 4, 4);
+                    playerGraphics.fillRect(20, 12, 4, 4);
+                    playerGraphics.fillStyle(0xFF0000, 1); // Red for attack
+                    playerGraphics.fillRect(32, 20, 16, 8); // Attack area
+                    playerGraphics.strokeRect(0, 0, 32, 48);
+                    playerGraphics.generateTexture('player_attack', 48, 48);
+                    
+                    // Red rat
+                    const redRatGraphics = scene.make.graphics({x: 0, y: 0, add: false});
+                    redRatGraphics.fillStyle(0xFF0000, 1);
+                    redRatGraphics.fillCircle(16, 16, 16);
+                    redRatGraphics.generateTexture('rat_red', 32, 32);
+                    
+                    // Blue rat
+                    const blueRatGraphics = scene.make.graphics({x: 0, y: 0, add: false});
+                    blueRatGraphics.fillStyle(0x0000FF, 1);
+                    blueRatGraphics.fillCircle(16, 16, 16);
+                    blueRatGraphics.generateTexture('rat_blue', 32, 32);
+                    
+                    // Boss
+                    const bossGraphics = scene.make.graphics({x: 0, y: 0, add: false});
+                    bossGraphics.fillStyle(0x800080, 1); // Purple
+                    bossGraphics.fillRect(0, 0, 64, 64);
+                    bossGraphics.fillStyle(0xFFFF00, 1); // Yellow eyes
+                    bossGraphics.fillRect(10, 10, 10, 10);
+                    bossGraphics.fillRect(44, 10, 10, 10);
+                    bossGraphics.generateTexture('boss', 64, 64);
+                    
+                    console.log('All textures created successfully');
+                } catch (error) {
+                    console.error('Error creating textures:', error);
+                }
             }
         };
     </script>

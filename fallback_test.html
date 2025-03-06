@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fallback Game Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #2c3e50;
+            color: white;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        #gameDiv {
+            position: relative;
+            margin: 0 auto;
+            width: 800px;
+            height: 400px;
+            background-color: #87CEEB; /* Sky blue */
+            border: 4px solid white;
+            overflow: hidden;
+        }
+        #player {
+            position: absolute;
+            width: 30px;
+            height: 45px;
+            background-color: #FFD700; /* Gold */
+            border: 1px solid black;
+            left: 100px;
+            bottom: 50px;
+        }
+        .platform {
+            position: absolute;
+            background-color: #8B4513; /* Brown */
+            height: 20px;
+        }
+        #mainPlatform {
+            width: 800px;
+            bottom: 0;
+            left: 0;
+        }
+        .enemy {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+        }
+        .redEnemy {
+            background-color: red;
+        }
+        .blueEnemy {
+            background-color: blue;
+        }
+        #healthBar {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-weight: bold;
+            font-size: 24px;
+        }
+        #screenIndicator {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        #controls {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.3);
+            display: inline-block;
+        }
+        #debugInfo {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.3);
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <h1>Fallback Game Test</h1>
+    <p>If your browser has issues with canvas/WebGL, this version uses pure DOM elements</p>
+    
+    <div id="gameDiv">
+        <div id="player"></div>
+        <div id="mainPlatform" class="platform"></div>
+        <div id="platform1" class="platform" style="width: 100px; bottom: 150px; left: 200px;"></div>
+        <div id="platform2" class="platform" style="width: 100px; bottom: 150px; left: 500px;"></div>
+        <div class="enemy redEnemy" style="left: 300px; bottom: 50px;"></div>
+        <div class="enemy blueEnemy" style="left: 600px; bottom: 180px;"></div>
+        <div id="healthBar">Health: 5</div>
+        <div id="screenIndicator">Screen: 1/5</div>
+    </div>
+    
+    <div id="controls">
+        <p>Controls: Use arrow keys to move, spacebar to attack</p>
+        <button id="leftBtn">Left</button>
+        <button id="rightBtn">Right</button>
+        <button id="jumpBtn">Jump</button>
+        <button id="attackBtn">Attack</button>
+    </div>
+    
+    <div id="debugInfo">
+        <p>Debug Information:</p>
+        <div id="debugText"></div>
+    </div>
+    
+    <script>
+        // Debug logger
+        const debug = {
+            el: document.getElementById('debugText'),
+            log: function(message) {
+                console.log(message);
+                this.el.innerHTML += `<div>${message}</div>`;
+            }
+        };
+        
+        debug.log("DOM-based game initialized");
+        debug.log(`Browser: ${navigator.userAgent}`);
+        
+        // Game state
+        const game = {
+            player: document.getElementById('player'),
+            healthBar: document.getElementById('healthBar'),
+            screenIndicator: document.getElementById('screenIndicator'),
+            health: 5,
+            screen: 1,
+            totalScreens: 5,
+            playerX: 100,
+            playerY: 50,
+            isJumping: false,
+            isAttacking: false,
+            facingRight: true
+        };
+        
+        // Move the player
+        function movePlayer(dx, dy) {
+            game.playerX += dx;
+            game.playerY += dy;
+            
+            // Keep player within bounds
+            if (game.playerX < 0) game.playerX = 0;
+            if (game.playerX > 770) game.playerX = 770;
+            if (game.playerY < 0) game.playerY = 0;
+            
+            // Update player position
+            game.player.style.left = game.playerX + 'px';
+            game.player.style.bottom = game.playerY + 'px';
+            
+            // Check if player reached the right edge
+            if (game.playerX >= 750 && game.screen < game.totalScreens) {
+                nextScreen();
+            }
+        }
+        
+        // Player jump
+        function jump() {
+            if (!game.isJumping) {
+                game.isJumping = true;
+                
+                let jumpHeight = 0;
+                const jumpInterval = setInterval(() => {
+                    if (jumpHeight < 10) {
+                        movePlayer(0, 10); // Move up
+                        jumpHeight++;
+                    } else if (jumpHeight < 20) {
+                        movePlayer(0, -10); // Move down
+                        jumpHeight++;
+                    } else {
+                        game.isJumping = false;
+                        clearInterval(jumpInterval);
+                    }
+                }, 30);
+                
+                debug.log("Player jumped");
+            }
+        }
+        
+        // Player attack
+        function attack() {
+            if (!game.isAttacking) {
+                game.isAttacking = true;
+                game.player.style.backgroundColor = '#FF9900'; // Change color during attack
+                
+                // Check for collision with enemies
+                const enemies = document.querySelectorAll('.enemy');
+                enemies.forEach(enemy => {
+                    const enemyRect = enemy.getBoundingClientRect();
+                    const playerRect = game.player.getBoundingClientRect();
+                    
+                    if (rectsIntersect(playerRect, enemyRect)) {
+                        enemy.style.display = 'none'; // Hide the enemy
+                        debug.log("Enemy defeated");
+                    }
+                });
+                
+                setTimeout(() => {
+                    game.player.style.backgroundColor = '#FFD700'; // Reset color
+                    game.isAttacking = false;
+                }, 300);
+                
+                debug.log("Player attacked");
+            }
+        }
+        
+        // Move to next screen
+        function nextScreen() {
+            game.screen++;
+            game.screenIndicator.textContent = `Screen: ${game.screen}/${game.totalScreens}`;
+            game.playerX = 50; // Reset player to left side
+            movePlayer(0, 0); // Update position
+            
+            debug.log(`Advanced to screen ${game.screen}`);
+            
+            // Show boss on final screen
+            if (game.screen === game.totalScreens) {
+                // Hide all enemies
+                document.querySelectorAll('.enemy').forEach(e => e.style.display = 'none');
+                
+                // Create boss
+                const boss = document.createElement('div');
+                boss.style.position = 'absolute';
+                boss.style.width = '60px';
+                boss.style.height = '60px';
+                boss.style.backgroundColor = 'purple';
+                boss.style.right = '100px';
+                boss.style.bottom = '100px';
+                boss.id = 'boss';
+                document.getElementById('gameDiv').appendChild(boss);
+                
+                debug.log("Boss appeared");
+            }
+        }
+        
+        // Collision detection
+        function rectsIntersect(r1, r2) {
+            return !(
+                r1.right < r2.left || 
+                r1.left > r2.right || 
+                r1.bottom < r2.top || 
+                r1.top > r2.bottom
+            );
+        }
+        
+        // Take damage
+        function takeDamage() {
+            game.health--;
+            game.healthBar.textContent = `Health: ${game.health}`;
+            
+            if (game.health <= 0) {
+                debug.log("Game over");
+                game.player.style.backgroundColor = 'red';
+            }
+        }
+        
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case 'ArrowLeft':
+                    movePlayer(-10, 0);
+                    game.facingRight = false;
+                    break;
+                case 'ArrowRight':
+                    movePlayer(10, 0);
+                    game.facingRight = true;
+                    break;
+                case 'ArrowUp':
+                    jump();
+                    break;
+                case ' ': // Spacebar
+                    attack();
+                    break;
+            }
+        });
+        
+        // Button controls
+        document.getElementById('leftBtn').addEventListener('click', () => {
+            movePlayer(-10, 0);
+            game.facingRight = false;
+        });
+        
+        document.getElementById('rightBtn').addEventListener('click', () => {
+            movePlayer(10, 0);
+            game.facingRight = true;
+        });
+        
+        document.getElementById('jumpBtn').addEventListener('click', jump);
+        document.getElementById('attackBtn').addEventListener('click', attack);
+        
+        // Initialize
+        debug.log("Controls initialized");
+        movePlayer(0, 0); // Set initial position
+    </script>
+</body>
+</html> 

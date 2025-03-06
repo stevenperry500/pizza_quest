@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generate Placeholder Assets - Pixel Pizza Quest</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #4a4a4a;
+            text-align: center;
+        }
+        .step {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border-radius: 5px;
+        }
+        .step h2 {
+            margin-top: 0;
+            color: #333;
+        }
+        .asset-container {
+            margin: 20px 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .asset-item {
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .asset-item img {
+            max-width: 100%;
+            height: auto;
+            margin-bottom: 10px;
+            image-rendering: pixelated;
+        }
+        .asset-item a {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 5px 10px;
+            background-color: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 3px;
+        }
+        #audio-info {
+            background-color: #e6f7ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 30px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Generate Placeholder Assets for Pixel Pizza Quest</h1>
+    
+    <div class="step">
+        <h2>Step 1: Generate Assets</h2>
+        <p>Click the button below to generate all placeholder assets for the game:</p>
+        <button id="generate-btn">Generate Assets</button>
+    </div>
+    
+    <div class="step">
+        <h2>Step 2: Download Assets</h2>
+        <p>Right-click each image below and select "Save Image As" to download them. Make sure to use the suggested filenames and save them to your "assets" folder.</p>
+        <div class="asset-container" id="assets"></div>
+    </div>
+    
+    <div id="audio-info">
+        <h2>About Audio Files</h2>
+        <p>For the background music (background_music.mp3), you'll need to:</p>
+        <ol>
+            <li>Use a tool like Audacity or an online music generator</li>
+            <li>Create a short looping music clip</li>
+            <li>Export as MP3</li>
+            <li>Save it to your "assets" folder</li>
+        </ol>
+        <p>Alternatively, you can find royalty-free game music online or use placeholder audio until you have proper assets.</p>
+    </div>
+
+    <script>
+        document.getElementById('generate-btn').addEventListener('click', function() {
+            const assetContainer = document.getElementById('assets');
+            assetContainer.innerHTML = ''; // Clear previous assets
+            
+            // Function to create a colored rectangle
+            function createColorRect(width, height, color, filename) {
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                
+                // Fill with color
+                ctx.fillStyle = color;
+                ctx.fillRect(0, 0, width, height);
+                
+                // Add some visual elements
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(2, 2, width - 4, height - 4);
+                
+                // Add text label
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = Math.floor(height / 4) + 'px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(filename.split('.')[0], width / 2, height / 2);
+                
+                return {
+                    dataUrl: canvas.toDataURL('image/png'),
+                    width: width,
+                    height: height
+                };
+            }
+            
+            // Function to create a sprite sheet
+            function createSpriteSheet(frameWidth, frameHeight, frames, color, filename) {
+                const canvas = document.createElement('canvas');
+                canvas.width = frameWidth * frames;
+                canvas.height = frameHeight;
+                const ctx = canvas.getContext('2d');
+                
+                // Fill each frame
+                for (let i = 0; i < frames; i++) {
+                    // Base color
+                    ctx.fillStyle = color;
+                    ctx.fillRect(i * frameWidth, 0, frameWidth, frameHeight);
+                    
+                    // Frame number
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.font = Math.floor(frameHeight / 3) + 'px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(i + 1, i * frameWidth + frameWidth / 2, frameHeight / 2);
+                    
+                    // Border
+                    ctx.strokeStyle = '#000000';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(i * frameWidth + 1, 1, frameWidth - 2, frameHeight - 2);
+                }
+                
+                return {
+                    dataUrl: canvas.toDataURL('image/png'),
+                    width: frameWidth * frames,
+                    height: frameHeight
+                };
+            }
+            
+            // Generate assets
+            const assets = [
+                { name: 'background.png', generator: () => createColorRect(800, 400, '#87CEEB', 'background.png') },
+                { name: 'platform.png', generator: () => createColorRect(200, 32, '#8B4513', 'platform.png') },
+                { name: 'health.png', generator: () => createColorRect(32, 32, '#FF0000', 'health.png') },
+                { name: 'player.png', generator: () => createSpriteSheet(32, 48, 12, '#FFD700', 'player.png') },
+                { name: 'rat_red.png', generator: () => createSpriteSheet(32, 32, 4, '#FF0000', 'rat_red.png') },
+                { name: 'rat_blue.png', generator: () => createSpriteSheet(32, 32, 4, '#0000FF', 'rat_blue.png') },
+                { name: 'condor.png', generator: () => createSpriteSheet(64, 64, 4, '#800080', 'condor.png') }
+            ];
+            
+            // Create and display each asset
+            assets.forEach(asset => {
+                const generatedAsset = asset.generator();
+                
+                const assetItem = document.createElement('div');
+                assetItem.className = 'asset-item';
+                
+                const img = document.createElement('img');
+                img.src = generatedAsset.dataUrl;
+                img.alt = asset.name;
+                
+                const downloadLink = document.createElement('a');
+                downloadLink.href = generatedAsset.dataUrl;
+                downloadLink.download = asset.name;
+                downloadLink.textContent = 'Download ' + asset.name;
+                
+                const info = document.createElement('p');
+                info.textContent = `${generatedAsset.width}x${generatedAsset.height}`;
+                
+                assetItem.appendChild(img);
+                assetItem.appendChild(info);
+                assetItem.appendChild(downloadLink);
+                
+                assetContainer.appendChild(assetItem);
+            });
+        });
+    </script>
+</body>
+</html> 

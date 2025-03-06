@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimal Phaser Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #2c3e50;
+            color: white;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        #gameContainer {
+            margin: 0 auto;
+            border: 4px solid white;
+            width: 800px;
+            height: 400px;
+            background-color: black;
+        }
+        #consoleOutput {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #666;
+            background-color: #333;
+            text-align: left;
+            height: 150px;
+            overflow-y: auto;
+            font-family: monospace;
+        }
+        .success { color: #4CAF50; }
+        .error { color: #f44336; }
+        .info { color: #2196F3; }
+    </style>
+</head>
+<body>
+    <h1>Minimal Phaser Test</h1>
+    <p>This is a stripped-down version to test basic rendering</p>
+    
+    <div id="gameContainer"></div>
+    
+    <div id="consoleOutput"></div>
+    
+    <script>
+        // Custom console logger
+        const gameConsole = {
+            output: document.getElementById('consoleOutput'),
+            log: function(message, type = 'info') {
+                console.log(message);
+                const div = document.createElement('div');
+                div.className = type;
+                div.textContent = `> ${message}`;
+                this.output.appendChild(div);
+                this.output.scrollTop = this.output.scrollHeight;
+            },
+            success: function(message) {
+                this.log(message, 'success');
+            },
+            error: function(message) {
+                this.log(message, 'error');
+            }
+        };
+
+        // Log browser information
+        gameConsole.log(`Browser: ${navigator.userAgent}`);
+        gameConsole.log(`Testing if basic rendering works...`);
+        
+        // First, let's try to create a simple canvas to see if basic rendering works
+        try {
+            const testCanvas = document.createElement('canvas');
+            testCanvas.width = 100;
+            testCanvas.height = 100;
+            const ctx = testCanvas.getContext('2d');
+            ctx.fillStyle = 'red';
+            ctx.fillRect(0, 0, 100, 100);
+            gameConsole.success('Basic canvas rendering works!');
+        } catch (e) {
+            gameConsole.error('Failed to create basic canvas: ' + e.message);
+        }
+        
+        // Now try to load Phaser
+        gameConsole.log('Loading Phaser...');
+        
+        function loadPhaser() {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js';
+                script.onload = () => {
+                    gameConsole.success('Phaser loaded successfully!');
+                    resolve();
+                };
+                script.onerror = () => {
+                    gameConsole.error('Failed to load Phaser from CDN');
+                    reject(new Error('Could not load Phaser library'));
+                };
+                document.head.appendChild(script);
+            });
+        }
+        
+        // After Phaser loads, create a minimal game
+        loadPhaser()
+            .then(() => {
+                gameConsole.log('Creating minimal Phaser game...');
+                
+                // Most basic game configuration
+                const config = {
+                    type: Phaser.AUTO,
+                    width: 800,
+                    height: 400,
+                    parent: 'gameContainer',
+                    backgroundColor: '#1a8cff',
+                    scene: {
+                        create: create
+                    }
+                };
+                
+                // Create the game
+                try {
+                    const game = new Phaser.Game(config);
+                    gameConsole.success('Game object created!');
+                    
+                    function create() {
+                        gameConsole.success('Scene created - if you can see this, Phaser is working!');
+                        
+                        // Add some simple text to the game
+                        this.add.text(400, 200, 'Phaser is working!', {
+                            fontSize: '32px',
+                            fontFamily: 'Arial',
+                            color: '#ffffff'
+                        }).setOrigin(0.5);
+                        
+                        // Add a simple shape
+                        this.add.circle(400, 300, 50, 0xff0000);
+                        
+                        gameConsole.success('Game elements added');
+                    }
+                } catch (e) {
+                    gameConsole.error('Failed to create game: ' + e.message);
+                    gameConsole.log('Stack trace: ' + e.stack);
+                }
+            })
+            .catch(error => {
+                gameConsole.error('Error in game initialization: ' + error.message);
+            });
+    </script>
+</body>
+</html> 

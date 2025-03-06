@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel Pizza Quest - Debug</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #2c3e50;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            border: 2px solid #000;
+            margin: 20px 0;
+        }
+        #gameContainer {
+            position: relative;
+            width: 800px;
+            height: 400px;
+            background-color: #000;
+        }
+        .debug-info {
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            margin-top: 20px;
+            width: 800px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .debug-status {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .success { color: #4CAF50; }
+        .error { color: #f44336; }
+        .warning { color: #ff9800; }
+    </style>
+</head>
+<body>
+    <h1>Pixel Pizza Quest - Debug Mode</h1>
+    
+    <div id="gameContainer"></div>
+    
+    <div class="debug-info" id="debugInfo">
+        <div class="debug-status">Debug Status:</div>
+        <div id="debugOutput"></div>
+    </div>
+    
+    <script>
+        // Debug logger
+        const debugLog = {
+            el: document.getElementById('debugOutput'),
+            log: function(message, type = 'info') {
+                console.log(message);
+                const div = document.createElement('div');
+                div.className = type;
+                div.textContent = `[${type.toUpperCase()}] ${message}`;
+                this.el.appendChild(div);
+            },
+            success: function(message) {
+                this.log(message, 'success');
+            },
+            error: function(message) {
+                this.log(message, 'error');
+            },
+            warning: function(message) {
+                this.log(message, 'warning');
+            }
+        };
+        
+        // Start debugging
+        debugLog.log('Starting debug mode...');
+        
+        // Check if the game container exists
+        const gameContainer = document.getElementById('gameContainer');
+        if (gameContainer) {
+            debugLog.success('Game container found');
+        } else {
+            debugLog.error('Game container not found');
+        }
+        
+        // Load Phaser
+        debugLog.log('Loading Phaser...');
+        
+        const phaserScript = document.createElement('script');
+        phaserScript.src = 'https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js';
+        phaserScript.onload = function() {
+            debugLog.success('Phaser loaded successfully');
+            initGame();
+        };
+        phaserScript.onerror = function() {
+            debugLog.error('Failed to load Phaser');
+        };
+        document.body.appendChild(phaserScript);
+        
+        // Init game after Phaser loads
+        function initGame() {
+            debugLog.log('Initializing game...');
+            
+            // Create a single color rectangle for testing
+            debugLog.log('Creating test texture...');
+            
+            try {
+                // Create a very simple game to test basic rendering
+                const config = {
+                    type: Phaser.AUTO,
+                    width: 800,
+                    height: 400,
+                    parent: 'gameContainer',
+                    backgroundColor: '#87CEEB', // Sky blue
+                    scene: {
+                        create: create
+                    }
+                };
+                
+                debugLog.log('Starting Phaser game with minimal config...');
+                const game = new Phaser.Game(config);
+                
+                function create() {
+                    debugLog.success('Scene created successfully');
+                    
+                    // Add a simple text
+                    this.add.text(400, 200, 'Debug Test - If you see this, rendering works!', {
+                        fontSize: '24px',
+                        fill: '#fff'
+                    }).setOrigin(0.5);
+                    
+                    debugLog.success('Text added to scene');
+                    
+                    // Try to create a simple rectangle shape
+                    const rect = this.add.rectangle(400, 300, 200, 100, 0xff0000);
+                    
+                    if (rect) {
+                        debugLog.success('Basic shape rendering works');
+                    }
+                }
+                
+            } catch (error) {
+                debugLog.error('Error initializing game: ' + error.message);
+                console.error(error);
+            }
+        }
+    </script>
+</body>
+</html> 

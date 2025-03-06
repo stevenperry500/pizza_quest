@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel Pizza Quest - Simple Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #2c3e50;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            border: 2px solid #000;
+            margin: 20px 0;
+        }
+        h1 {
+            text-align: center;
+        }
+        .controls {
+            margin-top: 20px;
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Pixel Pizza Quest - Simple Test</h1>
+    
+    <!-- Phaser CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    
+    <div class="controls">
+        <p>Controls: Arrow Keys to move, Up arrow to jump, Spacebar to attack</p>
+    </div>
+    
+    <script>
+        // Wait for DOM to be loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if Phaser is available
+            if (typeof Phaser === 'undefined') {
+                alert('Error loading Phaser library. Please check your internet connection and try again.');
+                return;
+            }
+            
+            // Game configuration - very simplified
+            const config = {
+                type: Phaser.AUTO,
+                width: 800,
+                height: 400,
+                backgroundColor: '#87CEEB', // Sky blue
+                physics: {
+                    default: 'arcade',
+                    arcade: {
+                        gravity: { y: 300 },
+                        debug: false
+                    }
+                },
+                scene: {
+                    preload: preload,
+                    create: create,
+                    update: update
+                }
+            };
+            
+            // Start the game
+            const game = new Phaser.Game(config);
+            
+            // Declare variables
+            let player;
+            let platforms;
+            let cursors;
+            
+            function preload() {
+                // Create basic shapes as placeholder textures
+                createPlaceholderTextures(this);
+            }
+            
+            function create() {
+                // Create platforms
+                platforms = this.physics.add.staticGroup();
+                
+                // Main ground platform
+                platforms.create(400, 380, 'platform');
+                
+                // Some floating platforms
+                platforms.create(600, 250, 'platform');
+                platforms.create(200, 200, 'platform');
+                
+                // Add player
+                player = this.physics.add.sprite(100, 300, 'player');
+                player.setBounce(0.2);
+                player.setCollideWorldBounds(true);
+                
+                // Set up collisions
+                this.physics.add.collider(player, platforms);
+                
+                // Set up keyboard input
+                cursors = this.input.keyboard.createCursorKeys();
+                
+                // Add instructions
+                this.add.text(400, 50, 'Simple Test - Use Arrow Keys to Move', {
+                    fontSize: '20px',
+                    fill: '#fff'
+                }).setOrigin(0.5, 0.5);
+            }
+            
+            function update() {
+                // Player movement
+                if (cursors.left.isDown) {
+                    player.setVelocityX(-160);
+                } else if (cursors.right.isDown) {
+                    player.setVelocityX(160);
+                } else {
+                    player.setVelocityX(0);
+                }
+                
+                // Jump
+                if (cursors.up.isDown && player.body.touching.down) {
+                    player.setVelocityY(-330);
+                }
+            }
+            
+            // Create placeholder textures function
+            function createPlaceholderTextures(scene) {
+                // Create platform texture (brown rectangle)
+                const platformGraphics = scene.make.graphics({x: 0, y: 0, add: false});
+                platformGraphics.fillStyle(0x8B4513, 1); // Brown color
+                platformGraphics.fillRect(0, 0, 200, 32);
+                platformGraphics.generateTexture('platform', 200, 32);
+                
+                // Create player texture (gold circle)
+                const playerGraphics = scene.make.graphics({x: 0, y: 0, add: false});
+                playerGraphics.fillStyle(0xFFD700, 1); // Gold color
+                playerGraphics.fillCircle(16, 16, 16);
+                playerGraphics.generateTexture('player', 32, 32);
+            }
+        });
+    </script>
+</body>
+</html> 

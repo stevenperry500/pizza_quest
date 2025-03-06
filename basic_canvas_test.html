@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Basic Canvas Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #2c3e50;
+            color: white;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        .test-box {
+            margin: 20px auto;
+            padding: 10px;
+            border: 2px solid #3498db;
+            border-radius: 5px;
+            background-color: #34495e;
+            max-width: 800px;
+        }
+        h2 {
+            margin-top: 0;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .success {
+            background-color: #27ae60;
+        }
+        .failure {
+            background-color: #e74c3c;
+        }
+        .info {
+            background-color: #3498db;
+        }
+        canvas {
+            border: 2px solid white;
+            background-color: black;
+            margin: 10px auto;
+            display: block;
+        }
+        pre {
+            text-align: left;
+            background-color: #2c3e50;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            color: #f1c40f;
+        }
+        #fix-list {
+            text-align: left;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Canvas Rendering Diagnostic Tool</h1>
+    
+    <!-- System Info -->
+    <div class="test-box">
+        <h2>System Information</h2>
+        <div id="system-info"></div>
+    </div>
+    
+    <!-- Canvas Support Test -->
+    <div class="test-box">
+        <h2>Canvas Support Test</h2>
+        <div id="canvas-support-result"></div>
+    </div>
+    
+    <!-- 2D Context Test -->
+    <div class="test-box">
+        <h2>Canvas 2D Context Test</h2>
+        <div id="canvas-2d-result"></div>
+        <canvas id="test-canvas" width="200" height="100"></canvas>
+    </div>
+    
+    <!-- WebGL Support Test -->
+    <div class="test-box">
+        <h2>WebGL Support Test</h2>
+        <div id="webgl-support-result"></div>
+        <canvas id="webgl-canvas" width="200" height="100"></canvas>
+    </div>
+    
+    <!-- Hardware Acceleration Test -->
+    <div class="test-box">
+        <h2>Hardware Acceleration Test</h2>
+        <div id="hardware-accel-result"></div>
+    </div>
+    
+    <!-- Recommended Fixes -->
+    <div class="test-box">
+        <h2>Recommended Fixes</h2>
+        <ul id="fix-list"></ul>
+    </div>
+    
+    <script>
+        // Display system info
+        const systemInfo = document.getElementById('system-info');
+        systemInfo.innerHTML = `
+            <p><strong>Browser:</strong> ${navigator.userAgent}</p>
+            <p><strong>Platform:</strong> ${navigator.platform}</p>
+            <p><strong>Vendor:</strong> ${navigator.vendor}</p>
+            <p><strong>Cookies Enabled:</strong> ${navigator.cookieEnabled}</p>
+        `;
+        
+        // Add a recommended fix
+        const fixList = document.getElementById('fix-list');
+        function addFix(fix) {
+            const li = document.createElement('li');
+            li.innerHTML = fix;
+            fixList.appendChild(li);
+        }
+        
+        // Test 1: Basic Canvas Support
+        const canvasSupportResult = document.getElementById('canvas-support-result');
+        let canvasSupported = false;
+        
+        try {
+            const testCanvas = document.createElement('canvas');
+            if (testCanvas.getContext) {
+                canvasSupportResult.textContent = 'Canvas element is supported!';
+                canvasSupportResult.className = 'result success';
+                canvasSupported = true;
+            } else {
+                canvasSupportResult.textContent = 'Canvas element is NOT supported in this browser.';
+                canvasSupportResult.className = 'result failure';
+                addFix('Switch to a modern browser that supports HTML5 Canvas (Chrome, Firefox, Safari, Edge).');
+            }
+        } catch (e) {
+            canvasSupportResult.textContent = 'Error testing canvas support: ' + e.message;
+            canvasSupportResult.className = 'result failure';
+            addFix('Try a different browser as your current browser appears to have issues with Canvas API.');
+        }
+        
+        // Test 2: Canvas 2D Context
+        const canvas2dResult = document.getElementById('canvas-2d-result');
+        const testCanvas = document.getElementById('test-canvas');
+        let context2dWorks = false;
+        
+        if (canvasSupported) {
+            try {
+                const ctx = testCanvas.getContext('2d');
+                if (ctx) {
+                    // Draw a simple shape
+                    ctx.fillStyle = 'red';
+                    ctx.fillRect(10, 10, 50, 50);
+                    ctx.fillStyle = 'blue';
+                    ctx.fillRect(70, 10, 50, 50);
+                    ctx.fillStyle = 'green';
+                    ctx.fillRect(130, 10, 50, 50);
+                    
+                    // Draw some text
+                    ctx.fillStyle = 'white';
+                    ctx.font = '16px Arial';
+                    ctx.fillText('2D Context Works!', 30, 80);
+                    
+                    canvas2dResult.textContent = 'Canvas 2D context works! You should see colored squares above.';
+                    canvas2dResult.className = 'result success';
+                    context2dWorks = true;
+                } else {
+                    canvas2dResult.textContent = 'Failed to get 2D context from canvas.';
+                    canvas2dResult.className = 'result failure';
+                    addFix('Update your browser to the latest version.');
+                    addFix('Check if hardware acceleration is enabled in your browser settings.');
+                }
+            } catch (e) {
+                canvas2dResult.textContent = 'Error testing 2D context: ' + e.message;
+                canvas2dResult.className = 'result failure';
+                addFix('Try disabling browser extensions that might be interfering with canvas rendering.');
+            }
+        } else {
+            canvas2dResult.textContent = 'Skipped 2D context test because canvas is not supported.';
+            canvas2dResult.className = 'result info';
+        }
+        
+        // Test 3: WebGL Support
+        const webglSupportResult = document.getElementById('webgl-support-result');
+        const webglCanvas = document.getElementById('webgl-canvas');
+        let webglSupported = false;
+        
+        if (canvasSupported) {
+            try {
+                // Try WebGL 1
+                let gl = webglCanvas.getContext('webgl') || webglCanvas.getContext('experimental-webgl');
+                
+                if (!gl) {
+                    // Try WebGL 2
+                    gl = webglCanvas.getContext('webgl2');
+                }
+                
+                if (gl) {
+                    // Set clear color to red
+                    gl.clearColor(1.0, 0.0, 0.0, 1.0);
+                    // Clear the color buffer
+                    gl.clear(gl.COLOR_BUFFER_BIT);
+                    
+                    // Draw a blue square
+                    const vertices = [
+                        -0.5, -0.5,
+                        0.5, -0.5,
+                        0.5, 0.5,
+                        -0.5, 0.5
+                    ];
+                    
+                    // Create vertex buffer
+                    const vertexBuffer = gl.createBuffer();
+                    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+                    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+                    
+                    // Vertex shader source code
+                    const vertCode = `
+                        attribute vec2 coordinates;
+                        void main(void) {
+                            gl_Position = vec4(coordinates, 0.0, 1.0);
+                        }`;
+                    
+                    // Create vertex shader
+                    const vertShader = gl.createShader(gl.VERTEX_SHADER);
+                    gl.shaderSource(vertShader, vertCode);
+                    gl.compileShader(vertShader);
+                    
+                    // Fragment shader source code
+                    const fragCode = `
+                        void main(void) {
+                            gl_FragColor = vec4(0.0, 0.0, 1.0, 1.0);
+                        }`;
+                    
+                    // Create fragment shader
+                    const fragShader = gl.createShader(gl.FRAGMENT_SHADER);
+                    gl.shaderSource(fragShader, fragCode);
+                    gl.compileShader(fragShader);
+                    
+                    // Create shader program
+                    const shaderProgram = gl.createProgram();
+                    gl.attachShader(shaderProgram, vertShader);
+                    gl.attachShader(shaderProgram, fragShader);
+                    gl.linkProgram(shaderProgram);
+                    gl.useProgram(shaderProgram);
+                    
+                    // Bind vertex buffer to shader attribute
+                    const coord = gl.getAttribLocation(shaderProgram, "coordinates");
+                    gl.vertexAttribPointer(coord, 2, gl.FLOAT, false, 0, 0);
+                    gl.enableVertexAttribArray(coord);
+                    
+                    // Draw the square
+                    gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+                    
+                    webglSupportResult.textContent = 'WebGL is supported! You should see a red background with a blue square.';
+                    webglSupportResult.className = 'result success';
+                    webglSupported = true;
+                } else {
+                    webglSupportResult.textContent = 'WebGL is NOT supported in this browser.';
+                    webglSupportResult.className = 'result failure';
+                    addFix('Enable WebGL in your browser settings.');
+                    addFix('Update your graphics drivers.');
+                    addFix('Use a browser with better WebGL support (Chrome or Firefox).');
+                }
+            } catch (e) {
+                webglSupportResult.textContent = 'Error testing WebGL support: ' + e.message;
+                webglSupportResult.className = 'result failure';
+                addFix('Try enabling hardware acceleration in your browser settings.');
+            }
+        } else {
+            webglSupportResult.textContent = 'Skipped WebGL test because canvas is not supported.';
+            webglSupportResult.className = 'result info';
+        }
+        
+        // Test 4: Hardware Acceleration
+        const hardwareAccelResult = document.getElementById('hardware-accel-result');
+        
+        // This is a heuristic test, not 100% accurate
+        function testHardwareAcceleration() {
+            const canvas = document.createElement('canvas');
+            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            
+            if (!gl) {
+                return 'Unknown (WebGL not available)';
+            }
+            
+            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            if (debugInfo) {
+                const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                
+                // Look for keywords indicating software rendering
+                const softwareRenderers = [
+                    'swiftshader', 'software', 'llvmpipe', 'virtualbox', 'vmware',
+                    'indirect', 'microsoft basic render', 'gdi generic'
+                ];
+                
+                const isSoftware = softwareRenderers.some(s => 
+                    renderer.toLowerCase().includes(s.toLowerCase())
+                );
+                
+                return {
+                    renderer: renderer,
+                    isHardwareAccelerated: !isSoftware
+                };
+            }
+            
+            return 'Unknown (debug info not available)';
+        }
+        
+        const accelInfo = testHardwareAcceleration();
+        
+        if (typeof accelInfo === 'string') {
+            hardwareAccelResult.textContent = accelInfo;
+            hardwareAccelResult.className = 'result info';
+        } else {
+            if (accelInfo.isHardwareAccelerated) {
+                hardwareAccelResult.innerHTML = `
+                    <p>Hardware acceleration appears to be <strong>enabled</strong>!</p>
+                    <p>Renderer: ${accelInfo.renderer}</p>
+                `;
+                hardwareAccelResult.className = 'result success';
+            } else {
+                hardwareAccelResult.innerHTML = `
+                    <p>Hardware acceleration appears to be <strong>disabled</strong>.</p>
+                    <p>Renderer: ${accelInfo.renderer}</p>
+                `;
+                hardwareAccelResult.className = 'result failure';
+                addFix('Enable hardware acceleration in your browser settings.');
+                addFix('Update your graphics drivers.');
+                addFix('If using a virtual machine, try enabling 3D acceleration.');
+            }
+        }
+        
+        // Add general fixes if there are any issues
+        if (!canvasSupported || !context2dWorks || !webglSupported) {
+            addFix('Try a different browser (Chrome or Firefox are recommended).');
+            addFix('Make sure your browser is up to date.');
+            addFix('Disable browser extensions temporarily to see if they\'re causing issues.');
+            addFix('For the game, use the fallback_test.html version which doesn\'t require Canvas support.');
+        }
+    </script>
+</body>
+</html> 

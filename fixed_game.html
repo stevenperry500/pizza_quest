@@ -107,6 +107,7 @@
             let bossAttackTimer = null;
             let gameWon = false;
             let winText;
+            let debugText; // Explicitly declare debugText
             
             // Initialize the game
             try {
@@ -241,6 +242,14 @@
                 }).setOrigin(0.5, 0.5);
                 winText.setVisible(false);
                 
+                // Add debug text for error reporting
+                debugText = this.add.text(400, 350, 'Game Ready', { 
+                    fontSize: '14px', 
+                    fill: '#ffffff',
+                    backgroundColor: '#000000',
+                    padding: { x: 5, y: 2 }
+                }).setOrigin(0.5, 0);
+                
                 this.physics.add.collider(boss, platforms);
                 this.physics.add.collider(projectiles, boss, hitBossWithProjectile, null, this);
                 
@@ -305,226 +314,434 @@
                     enemy.setBounce(0.2);
                     enemy.setCollideWorldBounds(true);
                     
+                    // Add chase data to enemy
+                    enemy.setData('chaseSpeed', 70);
+                    enemy.setData('activationDistance', 250);
+                    enemy.setData('jumpPower', 250);
+                    
                     // Set alternating directions
                     enemy.setVelocityX(i % 2 === 0 ? -50 : 50);
                     
-                    console.log(`Created ${enemyType} at ${x},${y}`);
+                    console.log(`Created ${enemyType} at ${x},${y} with chase behavior`);
                 }
             }
             
             // Initialize boss fight
             function initializeBossFight(scene) {
-                console.log('Initializing boss fight!');
-                
-                // Reset boss health for new fight
-                bossHealth = 10;
-                
-                // Activate boss
-                boss.setVisible(true);
-                boss.setActive(true);
-                boss.x = 700;
-                boss.y = 200;
-                boss.body.allowGravity = true;
-                boss.setVelocityX(-60);
-                
-                // Show boss health
-                bossHealthText.setText('Boss: ' + bossHealth);
-                bossHealthText.setVisible(true);
-                
-                // Start boss attack pattern
-                if (bossAttackTimer) {
-                    bossAttackTimer.remove();
+                try {
+                    console.log('Initializing boss fight!');
+                    
+                    if (debugText) {
+                        debugText.setText('Initializing boss fight...');
+                    }
+                    
+                    // Reset boss health for new fight
+                    bossHealth = 10;
+                    
+                    // Basic validation
+                    if (!boss) {
+                        console.error('Boss object is undefined');
+                        if (debugText) debugText.setText('Error: Boss object is undefined');
+                        return;
+                    }
+                    
+                    // Activate boss
+                    boss.setVisible(true);
+                    boss.setActive(true);
+                    boss.x = 700;
+                    boss.y = 200;
+                    
+                    // Ensure the physics body exists
+                    if (!boss.body) {
+                        console.error('Boss physics body is undefined');
+                        if (debugText) debugText.setText('Error: Boss physics body is undefined');
+                        scene.physics.world.enable(boss);
+                    }
+                    
+                    boss.body.allowGravity = true;
+                    boss.setVelocityX(-60);
+                    
+                    // Add boss data for chase behavior
+                    boss.setData('chaseSpeed', 80);
+                    boss.setData('jumpPower', 350);
+                    boss.setData('attackRange', 300);
+                    boss.setData('specialAttack', true);
+                    
+                    // Show boss health
+                    bossHealthText.setText('Boss: ' + bossHealth);
+                    bossHealthText.setVisible(true);
+                    
+                    // Start boss attack pattern - more aggressive in later stages
+                    if (bossAttackTimer) {
+                        bossAttackTimer.remove();
+                    }
+                    
+                    // Make attack frequency based on health - more desperate attacks when low health
+                    const attackDelay = Math.max(800, 2000 - ((10 - bossHealth) * 150));
+                    
+                    // Add a slight delay before first attack
+                    scene.time.delayedCall(1000, function() {
+                        if (boss && boss.active) {
+                            bossAttackTimer = scene.time.addEvent({
+                                delay: attackDelay,
+                                callback: bossShooting,
+                                callbackScope: scene,
+                                loop: true
+                            });
+                            
+                            if (debugText) {
+                                debugText.setText('Boss chase behavior initialized - ready to attack');
+                            }
+                        }
+                    });
+                    
+                    console.log('Boss chase behavior initialized with attack delay:', attackDelay);
+                } catch (error) {
+                    console.error('Error initializing boss fight:', error);
+                    if (debugText) {
+                        debugText.setText('Error initializing boss: ' + error.message);
+                    }
                 }
-                
-                bossAttackTimer = scene.time.addEvent({
-                    delay: 2000,
-                    callback: bossShooting,
-                    callbackScope: scene,
-                    loop: true
-                });
             }
             
             // Boss shooting function
             function bossShooting() {
-                if (!boss.active || !boss.visible || gameOver || gameWon) {
-                    return;
-                }
-                
-                console.log('Boss is attacking!');
-                
-                // Create a boss projectile
-                const bossProjectile = projectiles.create(boss.x, boss.y, 'boss_projectile');
-                bossProjectile.setData('type', 'boss'); // Mark as boss projectile
-                
-                // Calculate direction toward player
-                const angle = Phaser.Math.Angle.Between(boss.x, boss.y, player.x, player.y);
-                
-                // Set projectile velocity based on angle
-                const projectileSpeed = 200;
-                bossProjectile.setVelocityX(Math.cos(angle) * projectileSpeed);
-                bossProjectile.setVelocityY(Math.sin(angle) * projectileSpeed);
-                
-                // Make boss flash when shooting
-                boss.setTint(0xffff00);
-                boss.scene.time.delayedCall(100, function() {
-                    boss.clearTint();
-                });
-                
-                // Boss jumps sometimes
-                if (boss.body) {
-                    const touchingDown = boss.body.touching ? boss.body.touching.down : false;
-                    if (touchingDown && Math.random() > 0.5) {
-                        boss.setVelocityY(-300);
+                try {
+                    if (!boss || !boss.active || !boss.visible || !boss.body || gameOver || gameWon) {
+                        return;
                     }
-                }
-                
-                // Boss changes direction occasionally
-                if (Math.random() > 0.7) {
-                    boss.setVelocityX(-boss.body.velocity.x);
+                    
+                    console.log('Boss is attacking!');
+                    
+                    // Calculate distance and direction to player
+                    const distanceToPlayer = Phaser.Math.Distance.Between(boss.x, boss.y, player.x, player.y);
+                    const angle = Phaser.Math.Angle.Between(boss.x, boss.y, player.x, player.y);
+                    
+                    // Determine if player is on a different platform (significant height difference)
+                    const playerOnDifferentPlatform = Math.abs(player.y - boss.y) > 100;
+                    
+                    // Choose attack type based on position
+                    if (playerOnDifferentPlatform && Math.random() > 0.6) {
+                        // Special attack - lob projectiles in an arc when player is on different platform
+                        const bossProjectile = projectiles.create(boss.x, boss.y, 'boss_projectile');
+                        bossProjectile.setData('type', 'boss'); // Mark as boss projectile
+                        
+                        // Calculate arc trajectory
+                        const horizontalDistance = player.x - boss.x;
+                        const horizontalSpeed = horizontalDistance / 40; // Adjust as needed for arc timing
+                        
+                        // Set velocity with higher arc for reaching different platforms
+                        bossProjectile.setVelocityX(horizontalSpeed);
+                        bossProjectile.setVelocityY(-300); // Initial upward velocity
+                        
+                        // Add gravity to the projectile for arc effect
+                        bossProjectile.body.setGravityY(500);
+                        
+                        console.log('Boss used arc attack to reach player on different platform');
+                    } else {
+                        // Standard direct attack
+                        const bossProjectile = projectiles.create(boss.x, boss.y, 'boss_projectile');
+                        bossProjectile.setData('type', 'boss'); // Mark as boss projectile
+                        
+                        // Set projectile velocity based on angle
+                        const projectileSpeed = 200;
+                        bossProjectile.setVelocityX(Math.cos(angle) * projectileSpeed);
+                        bossProjectile.setVelocityY(Math.sin(angle) * projectileSpeed);
+                    }
+                    
+                    // Make boss flash when shooting
+                    boss.setTint(0xffff00);
+                    boss.scene.time.delayedCall(100, function() {
+                        if (boss && boss.active) {
+                            boss.clearTint();
+                        }
+                    });
+                    
+                    // Boss jumps sometimes
+                    if (boss.body) {
+                        const touchingDown = boss.body.touching ? boss.body.touching.down : false;
+                        if (touchingDown && Math.random() > 0.5) {
+                            boss.setVelocityY(-300);
+                        }
+                    }
+                    
+                    // Boss changes direction occasionally
+                    if (Math.random() > 0.7 && boss.body) {
+                        boss.setVelocityX(-boss.body.velocity.x);
+                    }
+                    
+                    // After shooting, consider moving toward player more aggressively
+                    if (Math.random() > 0.5 && boss.body) {
+                        const moveSpeed = Math.random() > 0.5 ? 80 : 120; // Sometimes move extra fast
+                        if (player.x < boss.x) {
+                            boss.setVelocityX(-moveSpeed);
+                        } else {
+                            boss.setVelocityX(moveSpeed);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error in boss shooting:', error);
+                    if (debugText) {
+                        debugText.setText('Error in boss shooting: ' + error.message);
+                    }
                 }
             }
             
             // Update game state
             function update(time) {
-                if (gameOver) {
-                    // If game over, stop all player movement
-                    player.setVelocityX(0);
-                    return;
-                }
-                
-                if (gameWon) {
-                    return;
-                }
-                
-                // Debug ground detection
-                if (player.body) {
-                    const touchingDown = player.body.touching ? player.body.touching.down : false;
-                    const blockedDown = player.body.blocked ? player.body.blocked.down : false;
+                try {
+                    if (gameOver) {
+                        // If game over, stop all player movement
+                        player.setVelocityX(0);
+                        return;
+                    }
                     
-                    if (touchingDown || blockedDown) {
-                        if (!player.wasOnGround) {
-                            console.log('Player is now on ground!');
-                            player.wasOnGround = true;
-                        }
-                    } else {
-                        if (player.wasOnGround) {
-                            console.log('Player is now in air!');
-                            player.wasOnGround = false;
-                        }
+                    if (gameWon) {
+                        return;
                     }
-                }
-                
-                // Player movement - allow movement regardless of damage state
-                if (cursors.left.isDown) {
-                    player.setVelocityX(-160);
-                    player.flipX = true;
-                } else if (cursors.right.isDown) {
-                    player.setVelocityX(160);
-                    player.flipX = false;
-                } else {
-                    player.setVelocityX(0);
-                }
-                
-                // Jump with up arrow
-                if (cursors.up.isDown && player.body) {
-                    const touchingDown = player.body.touching ? player.body.touching.down : false;
-                    const blockedDown = player.body.blocked ? player.body.blocked.down : false;
                     
-                    if (touchingDown || blockedDown) {
-                        player.setVelocityY(-330);
-                    }
-                }
-                
-                // Manual shooting check in update loop
-                if (Phaser.Input.Keyboard.JustDown(shootKey)) {
-                    if (time - lastShootTime > 500) { // Cooldown of 500ms
-                        shootProjectile();
-                        lastShootTime = time;
-                    }
-                }
-                
-                // Update enemies
-                enemies.getChildren().forEach(enemy => {
-                    if (enemy.body) {
-                        const touchingRight = enemy.body.touching ? enemy.body.touching.right : false;
-                        const blockedRight = enemy.body.blocked ? enemy.body.blocked.right : false;
-                        const touchingLeft = enemy.body.touching ? enemy.body.touching.left : false;
-                        const blockedLeft = enemy.body.blocked ? enemy.body.blocked.left : false;
+                    // Debug ground detection
+                    if (player.body) {
+                        const touchingDown = player.body.touching ? player.body.touching.down : false;
+                        const blockedDown = player.body.blocked ? player.body.blocked.down : false;
                         
-                        if (touchingRight || blockedRight) {
-                            enemy.setVelocityX(-50);
-                        } else if (touchingLeft || blockedLeft) {
-                            enemy.setVelocityX(50);
-                        }
-                    }
-                });
-                
-                // Update boss direction based on walls
-                if (boss && boss.active && boss.visible) {
-                    try {
-                        if (boss.body) {
-                            const touchingRight = boss.body.touching ? boss.body.touching.right : false;
-                            const blockedRight = boss.body.blocked ? boss.body.blocked.right : false;
-                            const touchingLeft = boss.body.touching ? boss.body.touching.left : false;
-                            const blockedLeft = boss.body.blocked ? boss.body.blocked.left : false;
-                            
-                            if (touchingRight || blockedRight) {
-                                boss.setVelocityX(-60);
-                            } else if (touchingLeft || blockedLeft) {
-                                boss.setVelocityX(60);
+                        if (touchingDown || blockedDown) {
+                            if (!player.wasOnGround) {
+                                console.log('Player is now on ground!');
+                                player.wasOnGround = true;
                             }
-                            
-                            // Make sure boss doesn't get stuck
-                            if (boss.x < 10) {
-                                boss.x = 10;
-                                boss.setVelocityX(60);
-                            } else if (boss.x > 790) {
-                                boss.x = 790;
-                                boss.setVelocityX(-60);
-                            }
-                            
-                            // Make sure boss stays on screen
-                            if (boss.y > 380) {
-                                boss.y = 380;
-                                boss.setVelocityY(-100);
+                        } else {
+                            if (player.wasOnGround) {
+                                console.log('Player is now in air!');
+                                player.wasOnGround = false;
                             }
                         }
-                    } catch (e) {
-                        console.error('Error updating boss:', e);
                     }
-                }
-                
-                // Clean up projectiles that have gone offscreen
-                projectiles.getChildren().forEach(projectile => {
-                    if (projectile.x < 0 || projectile.x > 800 || 
-                        projectile.y < 0 || projectile.y > 400) {
-                        projectile.destroy();
+                    
+                    // Player movement - allow movement regardless of damage state
+                    if (cursors.left.isDown) {
+                        player.setVelocityX(-160);
+                        player.flipX = true;
+                    } else if (cursors.right.isDown) {
+                        player.setVelocityX(160);
+                        player.flipX = false;
+                    } else {
+                        player.setVelocityX(0);
                     }
-                });
-                
-                // Player hit by boss projectiles
-                projectiles.getChildren().forEach(projectile => {
-                    if (projectile.getData('type') === 'boss') {
-                        if (Phaser.Geom.Rectangle.Overlaps(
-                            new Phaser.Geom.Rectangle(player.x - 16, player.y - 24, 32, 48),
-                            new Phaser.Geom.Rectangle(projectile.x - 8, projectile.y - 8, 16, 16)
-                        )) {
+                    
+                    // Jump with up arrow
+                    if (cursors.up.isDown && player.body) {
+                        const touchingDown = player.body.touching ? player.body.touching.down : false;
+                        const blockedDown = player.body.blocked ? player.body.blocked.down : false;
+                        
+                        if (touchingDown || blockedDown) {
+                            player.setVelocityY(-330);
+                        }
+                    }
+                    
+                    // Manual shooting check in update loop
+                    if (Phaser.Input.Keyboard.JustDown(shootKey)) {
+                        if (time - lastShootTime > 500) { // Cooldown of 500ms
+                            shootProjectile();
+                            lastShootTime = time;
+                        }
+                    }
+                    
+                    // Update enemies
+                    enemies.getChildren().forEach(enemy => {
+                        if (enemy.body) {
+                            const touchingRight = enemy.body.touching ? enemy.body.touching.right : false;
+                            const blockedRight = enemy.body.blocked ? enemy.body.blocked.right : false;
+                            const touchingLeft = enemy.body.touching ? enemy.body.touching.left : false;
+                            const blockedLeft = enemy.body.blocked ? enemy.body.blocked.left : false;
+                            
+                            // Chase player logic - determine direction to player
+                            const distanceToPlayer = Phaser.Math.Distance.Between(enemy.x, enemy.y, player.x, player.y);
+                            
+                            // Only chase when reasonably close (activation distance)
+                            if (distanceToPlayer < 250) {
+                                // Visual indicator for chase mode - tint enemy slightly red
+                                enemy.setTint(0xff9999);
+                                
+                                // Add some randomization to make movement less predictable
+                                if (Math.random() > 0.05) { // 95% chance to chase, 5% to move randomly
+                                    // Determine direction to player
+                                    if (player.x < enemy.x) {
+                                        // Player is to the left
+                                        if (!touchingLeft && !blockedLeft) {
+                                            enemy.setVelocityX(-70); // Chase left
+                                        } else if (enemy.body.touching.down) {
+                                            // If blocked by wall and on ground, try to jump over
+                                            enemy.setVelocityY(-250);
+                                        }
+                                    } else {
+                                        // Player is to the right
+                                        if (!touchingRight && !blockedRight) {
+                                            enemy.setVelocityX(70); // Chase right
+                                        } else if (enemy.body.touching.down) {
+                                            // If blocked by wall and on ground, try to jump over
+                                            enemy.setVelocityY(-250);
+                                        }
+                                    }
+                                    
+                                    // Attempt to jump if player is higher
+                                    if (player.y < enemy.y - 30 && 
+                                        enemy.body.touching.down && 
+                                        Math.random() > 0.7) { // 30% chance to jump when player is above
+                                        enemy.setVelocityY(-250);
+                                    }
+                                }
+                            } else {
+                                // Clear chase tint when not chasing
+                                enemy.clearTint();
+                                
+                                // Standard wall collision behavior when player is too far
+                                if (touchingRight || blockedRight) {
+                                    enemy.setVelocityX(-50);
+                                } else if (touchingLeft || blockedLeft) {
+                                    enemy.setVelocityX(50);
+                                }
+                            }
+                        }
+                    });
+                    
+                    // Update boss direction based on walls and chase player
+                    if (boss && boss.active && boss.visible) {
+                        try {
+                            if (boss.body) {
+                                const touchingRight = boss.body.touching ? boss.body.touching.right : false;
+                                const blockedRight = boss.body.blocked ? boss.body.blocked.right : false;
+                                const touchingLeft = boss.body.touching ? boss.body.touching.left : false;
+                                const blockedLeft = boss.body.blocked ? boss.body.blocked.left : false;
+                                const touchingDown = boss.body.touching ? boss.body.touching.down : false;
+                                
+                                // Chase player with boss (more aggressive than normal enemies)
+                                // Determine direction to player
+                                if (player.x < boss.x - 10) { // Add small threshold to prevent jitter
+                                    // Visual indicator - boss eyes glow when chasing
+                                    boss.setTint(0xffaa00);
+                                    
+                                    // Player is to the left
+                                    if (!touchingLeft && !blockedLeft) {
+                                        boss.setVelocityX(-80); // Move faster than regular enemies
+                                    } else if (touchingDown) {
+                                        // If blocked by wall and on ground, try to jump over
+                                        boss.setVelocityY(-350);
+                                    }
+                                } else if (player.x > boss.x + 10) { // Add small threshold to prevent jitter
+                                    // Visual indicator - boss eyes glow when chasing
+                                    boss.setTint(0xffaa00);
+                                    
+                                    // Player is to the right
+                                    if (!touchingRight && !blockedRight) {
+                                        boss.setVelocityX(80); // Move faster than regular enemies
+                                    } else if (touchingDown) {
+                                        // If blocked by wall and on ground, try to jump over
+                                        boss.setVelocityY(-350);
+                                    }
+                                } else {
+                                    // If close enough horizontally, stop briefly (looks more threatening)
+                                    if (Math.random() > 0.7) {
+                                        boss.setVelocityX(0);
+                                        // Intense glow when directly targeting player
+                                        boss.setTint(0xff4400);
+                                    }
+                                }
+                                
+                                // Update debug text with boss status if available
+                                if (debugText) {
+                                    debugText.setText(`Boss health: ${bossHealth}/10, x:${Math.floor(boss.x)}, y:${Math.floor(boss.y)}`);
+                                }
+                                
+                                // Boss jumps more aggressively when player is above
+                                if (player.y < boss.y - 50 && touchingDown && Math.random() > 0.5) {
+                                    boss.setVelocityY(-350);
+                                }
+                                
+                                // Make sure boss doesn't get stuck
+                                if (boss.x < 10) {
+                                    boss.x = 10;
+                                    boss.setVelocityX(60);
+                                } else if (boss.x > 790) {
+                                    boss.x = 790;
+                                    boss.setVelocityX(-60);
+                                }
+                                
+                                // Make sure boss stays on screen
+                                if (boss.y > 380) {
+                                    boss.y = 380;
+                                    boss.setVelocityY(-100);
+                                }
+                            }
+                        } catch (e) {
+                            console.error('Error updating boss:', e);
+                            if (debugText) {
+                                debugText.setText('Error updating boss: ' + e.message);
+                            }
+                        }
+                    }
+                    
+                    // Clean up projectiles that have gone offscreen
+                    projectiles.getChildren().forEach(projectile => {
+                        if (projectile.x < 0 || projectile.x > 800 || 
+                            projectile.y < 0 || projectile.y > 400) {
                             projectile.destroy();
-                            hitByBossProjectile();
+                        }
+                    });
+                    
+                    // Player hit by boss projectiles
+                    projectiles.getChildren().forEach(projectile => {
+                        if (projectile.getData('type') === 'boss') {
+                            if (Phaser.Geom.Rectangle.Overlaps(
+                                new Phaser.Geom.Rectangle(player.x - 16, player.y - 24, 32, 48),
+                                new Phaser.Geom.Rectangle(projectile.x - 8, projectile.y - 8, 16, 16)
+                            )) {
+                                projectile.destroy();
+                                hitByBossProjectile();
+                            }
+                        }
+                    });
+                    
+                    // Screen transition
+                    if (player.x > 780 && currentScreen < totalScreens) {
+                        currentScreen++;
+                        player.x = 20;
+                        
+                        // Update screen number display
+                        currentScreenText.setText('Screen: ' + currentScreen + '/' + totalScreens);
+                        console.log('Transitioning to screen ' + currentScreen);
+                        
+                        // Spawn new enemies for this screen
+                        spawnEnemies(this);
+                    }
+                    
+                    // Debug shortcut to boss fight (Down arrow)
+                    if (Phaser.Input.Keyboard.JustDown(cursors.down)) {
+                        currentScreen = totalScreens;
+                        currentScreenText.setText('Screen: ' + currentScreen + '/' + totalScreens);
+                        player.x = 100;
+                        player.y = 300;
+                        console.log('DEBUG: Skipping to boss fight');
+                        
+                        // Force boss fight initialization
+                        spawnEnemies(this);
+                        
+                        if (debugText) {
+                            debugText.setText('Skipped to boss fight screen');
                         }
                     }
-                });
-                
-                // Screen transition
-                if (player.x > 780 && currentScreen < totalScreens) {
-                    currentScreen++;
-                    player.x = 20;
                     
-                    // Update screen number display
-                    currentScreenText.setText('Screen: ' + currentScreen + '/' + totalScreens);
-                    
-                    // Spawn new enemies for this screen
-                    spawnEnemies(this);
+                    // If on final screen but boss isn't visible, reinitialize
+                    if (currentScreen === totalScreens && (!boss || !boss.visible || !boss.active)) {
+                        console.log('On final screen but boss not active - reinitializing boss');
+                        if (debugText) debugText.setText('Respawning boss...');
+                        spawnEnemies(this);
+                    }
+                } catch (error) {
+                    console.error('Error in update:', error);
+                    if (debugText) {
+                        debugText.setText('Error in update: ' + error.message);
+                    }
                 }
             }
             
@@ -552,21 +769,28 @@
             
             // Shoot projectile function
             function shootProjectile() {
-                if (!player || !player.scene || gameOver) return;
-                
-                console.log('Shooting projectile!');
-                const projectile = projectiles.create(
-                    player.x + (player.flipX ? -20 : 20), 
-                    player.y, 
-                    'projectile'
-                );
-                
-                // Set projectile velocity based on player direction
-                const projectileSpeed = 400;
-                projectile.setVelocityX(player.flipX ? -projectileSpeed : projectileSpeed);
-                
-                // Add a small random vertical velocity for variation
-                projectile.setVelocityY((Math.random() - 0.5) * 50);
+                try {
+                    if (!player || !player.scene || gameOver) return;
+                    
+                    console.log('Shooting projectile!');
+                    const projectile = projectiles.create(
+                        player.x + (player.flipX ? -20 : 20), 
+                        player.y, 
+                        'projectile'
+                    );
+                    
+                    // Set projectile velocity based on player direction
+                    const projectileSpeed = 400;
+                    projectile.setVelocityX(player.flipX ? -projectileSpeed : projectileSpeed);
+                    
+                    // Add a small random vertical velocity for variation
+                    projectile.setVelocityY((Math.random() - 0.5) * 50);
+                } catch (error) {
+                    console.error('Error in shootProjectile:', error);
+                    if (debugText) {
+                        debugText.setText('Error shooting: ' + error.message);
+                    }
+                }
             }
             
             // Handle projectile hitting platform
@@ -598,40 +822,72 @@
             
             // Handle projectile hitting boss
             function hitBossWithProjectile(projectile, boss) {
-                // Only player projectiles damage the boss
-                if (projectile.getData('type') !== 'boss') {
-                    projectile.destroy();
+                try {
+                    // Skip if boss is invalid
+                    if (!boss || !boss.active || !boss.visible) {
+                        projectile.destroy();
+                        return;
+                    }
                     
-                    // Decrease boss health
-                    bossHealth--;
-                    bossHealthText.setText('Boss: ' + bossHealth);
-                    console.log('Boss hit by projectile! Health: ' + bossHealth);
-                    
-                    // Visual feedback
-                    boss.setTint(0xff0000); // Flash red
-                    
-                    // Reset tint after 100ms
-                    boss.scene.time.delayedCall(100, function() {
-                        boss.clearTint();
-                    });
-                    
-                    // Check if boss is defeated
-                    if (bossHealth <= 0) {
-                        bossDeath();
-                    } else {
-                        // Boss gets faster when damaged
-                        const currentVelX = boss.body.velocity.x;
-                        const direction = currentVelX > 0 ? 1 : -1;
-                        const speed = Math.min(200, Math.abs(currentVelX) + 10);
-                        boss.setVelocityX(direction * speed);
+                    // Only player projectiles damage the boss
+                    if (projectile.getData('type') !== 'boss') {
+                        // Mark this projectile as processed to prevent multiple hits
+                        projectile.setData('hit_processed', true);
+                        projectile.destroy();
                         
-                        // Boss jumps when hit
-                        if (boss.body) {
-                            const touchingDown = boss.body.touching ? boss.body.touching.down : false;
-                            if (touchingDown) {
+                        // Decrease boss health
+                        bossHealth--;
+                        bossHealthText.setText('Boss: ' + bossHealth);
+                        console.log('Boss hit by projectile! Health: ' + bossHealth);
+                        
+                        // Visual feedback
+                        boss.setTint(0xff0000); // Flash red
+                        
+                        // Reset tint after 100ms
+                        boss.scene.time.delayedCall(100, function() {
+                            if (boss && boss.active) {
+                                boss.clearTint();
+                            }
+                        });
+                        
+                        // Check if boss is defeated
+                        if (bossHealth <= 0) {
+                            bossDeath();
+                        } else {
+                            // Boss gets faster and more aggressive when damaged
+                            if (boss.body) {
+                                // Adjust attack timer to be faster as health decreases
+                                if (bossAttackTimer) {
+                                    bossAttackTimer.remove();
+                                }
+                                
+                                // Make attack frequency based on health - more desperate attacks when low health
+                                const attackDelay = Math.max(800, 2000 - ((10 - bossHealth) * 150));
+                                
+                                bossAttackTimer = boss.scene.time.addEvent({
+                                    delay: attackDelay,
+                                    callback: bossShooting,
+                                    callbackScope: boss.scene,
+                                    loop: true
+                                });
+                                
+                                // Boss gets faster when damaged
+                                const currentVelX = boss.body.velocity.x;
+                                const direction = currentVelX > 0 ? 1 : -1;
+                                const speed = Math.min(200, Math.abs(currentVelX) + 10);
+                                boss.setVelocityX(direction * speed);
+                            }
+                            
+                            // Boss jumps when hit
+                            if (boss.body && boss.body.touching && boss.body.touching.down) {
                                 boss.setVelocityY(-300);
                             }
                         }
+                    }
+                } catch (error) {
+                    console.error('Error in hitBossWithProjectile:', error);
+                    if (debugText) {
+                        debugText.setText('Error hitting boss: ' + error.message);
                     }
                 }
             }
@@ -777,12 +1033,20 @@
                     const redRatGraphics = scene.make.graphics({x: 0, y: 0, add: false});
                     redRatGraphics.fillStyle(0xFF0000, 1);
                     redRatGraphics.fillCircle(16, 16, 16);
+                    // Add angry eyes for chase state
+                    redRatGraphics.fillStyle(0x000000, 1);
+                    redRatGraphics.fillRect(10, 10, 4, 4);
+                    redRatGraphics.fillRect(18, 10, 4, 4);
                     redRatGraphics.generateTexture('rat_red', 32, 32);
                     
                     // Blue rat
                     const blueRatGraphics = scene.make.graphics({x: 0, y: 0, add: false});
                     blueRatGraphics.fillStyle(0x0000FF, 1);
                     blueRatGraphics.fillCircle(16, 16, 16);
+                    // Add angry eyes for chase state
+                    blueRatGraphics.fillStyle(0x000000, 1);
+                    blueRatGraphics.fillRect(10, 10, 4, 4);
+                    blueRatGraphics.fillRect(18, 10, 4, 4);
                     blueRatGraphics.generateTexture('rat_blue', 32, 32);
                     
                     // Boss
@@ -792,6 +1056,10 @@
                     bossGraphics.fillStyle(0xFFFF00, 1); // Yellow eyes
                     bossGraphics.fillRect(10, 10, 10, 10);
                     bossGraphics.fillRect(44, 10, 10, 10);
+                    // Add angry eyebrows
+                    bossGraphics.fillStyle(0x000000, 1);
+                    bossGraphics.fillRect(8, 6, 14, 3);
+                    bossGraphics.fillRect(42, 6, 14, 3);
                     bossGraphics.generateTexture('boss', 64, 64);
                     
                     console.log('All textures created successfully');

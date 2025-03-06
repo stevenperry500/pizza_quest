@@ -42,9 +42,8 @@
         <ul>
             <li>Left/Right Arrow Keys: Move left/right</li>
             <li>Up Arrow Key: Jump (can combine with left/right for diagonal jumps)</li>
-            <li>Spacebar: Shoot projectiles (only one at a time; wait for it to hit something)</li>
+            <li>Spacebar: Shoot projectiles</li>
         </ul>
-        <p>Note: You can only have one projectile active at a time. Watch the indicator in the top-right corner to know when you can shoot again.</p>
         <p>Open your browser's developer console (F12 or Cmd+Option+I) to see debug messages</p>
         <button id="jumpButton" style="padding: 10px 20px; font-size: 18px; margin-top: 10px;">JUMP!</button>
     </div>
@@ -95,7 +94,7 @@
             let health = 5;
             let healthText;
             let currentScreen = 1;
-            let totalScreens = 5;
+            let totalScreens = 3;
             let jumpKey;
             let invincible = false;
             let invincibleTimer = null;
@@ -103,14 +102,18 @@
             let shootKey;
             let lastShootTime = 0;
             let currentScreenText;
-            let bossHealth = 10;
+            let bossHealthDisplay; // NEW: Separate display element for boss health
+            let BOSS_MAX_HEALTH = 10; // NEW: Constant for boss max health
+            let BOSS_CURRENT_HEALTH = 10; // NEW: Global to track boss health explicitly
+            let bossIsHit = false; // NEW: Flag to prevent multiple hits in the same frame
             let bossHealthText;
             let bossAttackTimer = null;
             let gameWon = false;
             let winText;
             let debugText; // Explicitly declare debugText
-            let activePlayerProjectile = false; // Track if player has an active projectile
-            let shootIndicator; // Visual indicator for shoot availability
+            let activePlayerProjectile = false; // Re-adding flag to track active projectile
+            let gameOverOverlay; // NEW: Game over overlay
+            let retryButton; // NEW: Retry button
             
             // Initialize the game
             try {
@@ -228,13 +231,17 @@
                 boss.setActive(false);
                 
                 // Initialize boss health display (hidden until final screen)
-                bossHealthText = this.add.text(400, 50, 'Boss: ' + bossHealth, { 
+                bossHealthText = this.add.text(400, 50, 'Boss: ' + BOSS_CURRENT_HEALTH + '/' + BOSS_MAX_HEALTH, { 
                     fontSize: '32px', 
                     fill: '#ff0000',
                     backgroundColor: '#000000',
                     padding: { x: 10, y: 5 }
                 }).setOrigin(0.5, 0);
                 bossHealthText.setVisible(false);
+                
+                // Add visual health bar for boss
+                bossHealthDisplay = this.add.graphics();
+                bossHealthDisplay.setVisible(false);
                 
                 // Win text (hidden initially)
                 winText = this.add.text(400, 200, 'YOU WIN!', { 
@@ -244,6 +251,38 @@
                     padding: { x: 20, y: 10 }
                 }).setOrigin(0.5, 0.5);
                 winText.setVisible(false);
+                
+                // Game over overlay (hidden initially)
+                gameOverOverlay = this.add.graphics();
+                gameOverOverlay.fillStyle(0x000000, 0);
+                gameOverOverlay.fillRect(0, 0, 800, 400);
+                gameOverOverlay.setVisible(false);
+                
+                // Game over text (hidden initially)
+                const gameOverText = this.add.text(400, 150, 'GAME OVER', { 
+                    fontSize: '64px', 
+                    fill: '#ff0000',
+                    padding: { x: 20, y: 10 }
+                }).setOrigin(0.5, 0.5);
+                gameOverText.setVisible(false);
+                gameOverText.setDepth(10);
+                
+                // Retry button (hidden initially)
+                retryButton = this.add.text(400, 250, 'RETRY', { 
+                    fontSize: '32px', 
+                    fill: '#ffffff',
+                    backgroundColor: '#ff0000',
+                    padding: { x: 20, y: 10 }
+                }).setOrigin(0.5, 0.5);
+                retryButton.setInteractive({ useHandCursor: true });
+                retryButton.on('pointerdown', () => {
+                    restartGame(this);
+                });
+                retryButton.setVisible(false);
+                retryButton.setDepth(10);
+                
+                // Group game over elements
+                this.gameOverElements = [gameOverOverlay, gameOverText, retryButton];
                 
                 // Add debug text for error reporting
                 debugText = this.add.text(400, 350, 'Game Ready', { 
@@ -264,13 +303,6 @@
                     fontSize: '24px',
                     fill: '#fff'
                 }).setOrigin(0.5, 0);
-                
-                // Add shoot indicator (green when can shoot, red when cannot)
-                shootIndicator = this.add.text(700, 16, '● SHOOT READY', {
-                    fontSize: '20px',
-                    fill: '#00ff00',
-                    fontStyle: 'bold'
-                });
                 
                 // Collisions between player and enemies
                 this.physics.add.overlap(player, enemies, hitEnemy, null, this);
@@ -310,7 +342,7 @@
                 }
                 
                 // Number of enemies increases with each screen
-                const enemyCount = 2 + currentScreen;
+                const enemyCount = 3 + currentScreen;
                 
                 for (let i = 0; i < enemyCount; i++) {
                     // Alternate between red and blue rats
@@ -336,82 +368,102 @@
                 }
             }
             
-            // Initialize boss fight
+            // Initialize boss fight - COMPLETELY REWRITTEN
             function initializeBossFight(scene) {
                 try {
-                    console.log('Initializing boss fight!');
+                    console.log('========= INITIALIZING BOSS FIGHT =========');
                     
-                    if (debugText) {
-                        debugText.setText('Initializing boss fight...');
+                    // Skip if game already won
+                    if (gameWon) {
+                        console.log('Game already won, skipping boss initialization');
+                        return;
                     }
                     
-                    // Reset boss health for new fight
-                    bossHealth = 10;
+                    // Reset boss health to full
+                    BOSS_CURRENT_HEALTH = BOSS_MAX_HEALTH;
+                    console.log(`Boss health reset to ${BOSS_CURRENT_HEALTH}/${BOSS_MAX_HEALTH}`);
                     
                     // Basic validation
                     if (!boss) {
                         console.error('Boss object is undefined');
-                        if (debugText) debugText.setText('Error: Boss object is undefined');
                         return;
                     }
                     
-                    // Activate boss
+                    // Position and activate boss
                     boss.setVisible(true);
                     boss.setActive(true);
                     boss.x = 700;
                     boss.y = 200;
                     
-                    // Ensure the physics body exists
+                    // Ensure physics body is enabled
                     if (!boss.body) {
-                        console.error('Boss physics body is undefined');
-                        if (debugText) debugText.setText('Error: Boss physics body is undefined');
                         scene.physics.world.enable(boss);
                     }
                     
+                    // Initialize boss movement
                     boss.body.allowGravity = true;
                     boss.setVelocityX(-60);
                     
-                    // Add boss data for chase behavior
-                    boss.setData('chaseSpeed', 80);
-                    boss.setData('jumpPower', 350);
-                    boss.setData('attackRange', 300);
-                    boss.setData('specialAttack', true);
+                    // Store basic data on boss
+                    boss.setData('dying', false);
                     
-                    // Show boss health
-                    bossHealthText.setText('Boss: ' + bossHealth);
+                    // Show and update boss health display
+                    bossHealthText.setText(`Boss: ${BOSS_CURRENT_HEALTH}/${BOSS_MAX_HEALTH}`);
                     bossHealthText.setVisible(true);
                     
-                    // Start boss attack pattern - more aggressive in later stages
+                    // Update the health bar
+                    updateBossHealthBar(scene);
+                    
+                    // Clear any previous attack timer
                     if (bossAttackTimer) {
                         bossAttackTimer.remove();
                     }
                     
-                    // Make attack frequency based on health - more desperate attacks when low health
-                    const attackDelay = Math.max(800, 2000 - ((10 - bossHealth) * 150));
-                    
-                    // Add a slight delay before first attack
-                    scene.time.delayedCall(1000, function() {
+                    // Setup new attack pattern with delay
+                    scene.time.delayedCall(1500, function() {
                         if (boss && boss.active) {
                             bossAttackTimer = scene.time.addEvent({
-                                delay: attackDelay,
+                                delay: 2000,
                                 callback: bossShooting,
                                 callbackScope: scene,
                                 loop: true
                             });
                             
-                            if (debugText) {
-                                debugText.setText('Boss chase behavior initialized - ready to attack');
-                            }
+                            console.log('Boss attack pattern initialized');
                         }
                     });
                     
-                    console.log('Boss chase behavior initialized with attack delay:', attackDelay);
+                    // Update debug text
+                    if (debugText) {
+                        debugText.setText(`Boss initialized with ${BOSS_CURRENT_HEALTH}/${BOSS_MAX_HEALTH} health`);
+                    }
+                    
+                    console.log('========= BOSS FIGHT INITIALIZED =========');
                 } catch (error) {
                     console.error('Error initializing boss fight:', error);
                     if (debugText) {
                         debugText.setText('Error initializing boss: ' + error.message);
                     }
                 }
+            }
+            
+            // Update boss health bar - NEW FUNCTION
+            function updateBossHealthBar(scene) {
+                if (!bossHealthDisplay) return;
+                
+                bossHealthDisplay.clear();
+                
+                // Make health bar visible when boss appears
+                bossHealthDisplay.setVisible(boss && boss.visible);
+                
+                // Draw background (red)
+                bossHealthDisplay.fillStyle(0xff0000);
+                bossHealthDisplay.fillRect(300, 80, 200, 15);
+                
+                // Draw foreground (green) - size based on health percentage
+                const healthRatio = BOSS_CURRENT_HEALTH / BOSS_MAX_HEALTH;
+                bossHealthDisplay.fillStyle(0x00ff00);
+                bossHealthDisplay.fillRect(300, 80, 200 * healthRatio, 15);
             }
             
             // Boss shooting function
@@ -529,14 +581,14 @@
                     }
                     
                     // Player movement - allow movement regardless of damage state
-                    if (cursors.left.isDown) {
-                        player.setVelocityX(-160);
+                if (cursors.left.isDown) {
+                    player.setVelocityX(-160);
                         player.flipX = true;
-                    } else if (cursors.right.isDown) {
-                        player.setVelocityX(160);
+                } else if (cursors.right.isDown) {
+                    player.setVelocityX(160);
                         player.flipX = false;
-                    } else {
-                        player.setVelocityX(0);
+                } else {
+                    player.setVelocityX(0);
                     }
                     
                     // Jump with up arrow
@@ -545,20 +597,20 @@
                         const blockedDown = player.body.blocked ? player.body.blocked.down : false;
                         
                         if (touchingDown || blockedDown) {
-                            player.setVelocityY(-330);
+                    player.setVelocityY(-330);
                         }
                     }
                     
                     // Manual shooting check in update loop
                     if (Phaser.Input.Keyboard.JustDown(shootKey)) {
-                        if (time - lastShootTime > 500) { // Cooldown of 500ms
+                        if (time - lastShootTime > 250) { // Reduced cooldown to 250ms (still need some cooldown to prevent spam)
                             shootProjectile();
                             lastShootTime = time;
                         }
-                    }
-                    
-                    // Update enemies
-                    enemies.getChildren().forEach(enemy => {
+                }
+                
+                // Update enemies
+                enemies.getChildren().forEach(enemy => {
                         if (enemy.body) {
                             const touchingRight = enemy.body.touching ? enemy.body.touching.right : false;
                             const blockedRight = enemy.body.blocked ? enemy.body.blocked.right : false;
@@ -607,9 +659,9 @@
                                 
                                 // Standard wall collision behavior when player is too far
                                 if (touchingRight || blockedRight) {
-                                    enemy.setVelocityX(-50);
+                        enemy.setVelocityX(-50);
                                 } else if (touchingLeft || blockedLeft) {
-                                    enemy.setVelocityX(50);
+                        enemy.setVelocityX(50);
                                 }
                             }
                         }
@@ -658,9 +710,15 @@
                                     }
                                 }
                                 
-                                // Update debug text with boss status if available
+                                // Update debug text with current hit count
+                                let hitCount = boss.getData('hitCount');
+                                if (hitCount === undefined || hitCount === null) {
+                                    hitCount = 0;
+                                    boss.setData('hitCount', 0);
+                                }
+                                
                                 if (debugText) {
-                                    debugText.setText(`Boss health: ${bossHealth}/10, x:${Math.floor(boss.x)}, y:${Math.floor(boss.y)}`);
+                                    debugText.setText(`Boss hits: ${hitCount}/10, Health: ${10-hitCount}/10`);
                                 }
                                 
                                 // Boss jumps more aggressively when player is above
@@ -696,14 +754,9 @@
                         if (projectile.x < 0 || projectile.x > 800 || 
                             projectile.y < 0 || projectile.y > 400) {
                             
-                            // If it's a player projectile that went offscreen, reset the flag
+                            // Reset player's active projectile flag if this was a player projectile
                             if (!projectile.getData('type')) {
                                 activePlayerProjectile = false;
-                                // Update shoot indicator
-                                if (shootIndicator) {
-                                    shootIndicator.setText('● SHOOT READY');
-                                    shootIndicator.setColor('#00ff00');
-                                }
                             }
                             
                             projectile.destroy();
@@ -720,14 +773,14 @@
                                 projectile.destroy();
                                 hitByBossProjectile();
                             }
-                        }
-                    });
+                    }
+                });
+                
+                // Screen transition
+                if (player.x > 780 && currentScreen < totalScreens) {
+                    currentScreen++;
+                    player.x = 20;
                     
-                    // Screen transition
-                    if (player.x > 780 && currentScreen < totalScreens) {
-                        currentScreen++;
-                        player.x = 20;
-                        
                         // Update screen number display
                         currentScreenText.setText('Screen: ' + currentScreen + '/' + totalScreens);
                         console.log('Transitioning to screen ' + currentScreen);
@@ -736,27 +789,19 @@
                         spawnEnemies(this);
                     }
                     
-                    // Debug shortcut to boss fight (Down arrow)
-                    if (Phaser.Input.Keyboard.JustDown(cursors.down)) {
-                        currentScreen = totalScreens;
-                        currentScreenText.setText('Screen: ' + currentScreen + '/' + totalScreens);
-                        player.x = 100;
-                        player.y = 300;
-                        console.log('DEBUG: Skipping to boss fight');
-                        
-                        // Force boss fight initialization
-                        spawnEnemies(this);
-                        
-                        if (debugText) {
-                            debugText.setText('Skipped to boss fight screen');
+                    // Only reinitialize boss if we're on the final screen and the boss needs to be initialized
+                    if (currentScreen === totalScreens && !gameWon) {
+                        if (!boss || !boss.active || !boss.visible) {
+                            console.log('Initializing boss fight on final screen');
+                            spawnEnemies(this);
                         }
                     }
                     
-                    // If on final screen but boss isn't visible, reinitialize
-                    if (currentScreen === totalScreens && (!boss || !boss.visible || !boss.active)) {
-                        console.log('On final screen but boss not active - reinitializing boss');
-                        if (debugText) debugText.setText('Respawning boss...');
-                        spawnEnemies(this);
+                    // BOSS UPDATE: Show current health in debug display if boss is active
+                    if (boss && boss.active && boss.visible) {
+                        if (debugText) {
+                            debugText.setText(`Boss health: ${BOSS_CURRENT_HEALTH}/${BOSS_MAX_HEALTH}`);
+                        }
                     }
                 } catch (error) {
                     console.error('Error in update:', error);
@@ -788,14 +833,14 @@
                 }
             }
             
-            // Shoot projectile function
+            // Shoot projectile function - UPDATED
             function shootProjectile() {
                 try {
                     if (!player || !player.scene || gameOver) return;
                     
-                    // Only allow shooting if there is no active player projectile
+                    // Only allow shooting if there's no active projectile
                     if (activePlayerProjectile) {
-                        console.log('Cannot shoot: active projectile already exists');
+                        console.log('Cannot shoot: already have an active projectile');
                         return;
                     }
                     
@@ -816,11 +861,6 @@
                     // Mark that player has an active projectile
                     activePlayerProjectile = true;
                     
-                    // Update shoot indicator
-                    if (shootIndicator) {
-                        shootIndicator.setText('● RELOADING');
-                        shootIndicator.setColor('#ff0000');
-                    }
                 } catch (error) {
                     console.error('Error in shootProjectile:', error);
                     if (debugText) {
@@ -831,28 +871,18 @@
             
             // Handle projectile hitting platform
             function hitPlatform(projectile) {
-                // Check if it's a player projectile (not a boss projectile)
+                // Reset player's projectile if this was a player projectile
                 if (!projectile.getData('type')) {
                     activePlayerProjectile = false;
-                    // Update shoot indicator
-                    if (shootIndicator) {
-                        shootIndicator.setText('● SHOOT READY');
-                        shootIndicator.setColor('#00ff00');
-                    }
                 }
                 projectile.destroy();
             }
             
             // Handle projectile hitting enemy
             function hitEnemyWithProjectile(projectile, enemy) {
-                // Check if it's a player projectile
+                // Reset player's projectile if this was a player projectile
                 if (!projectile.getData('type')) {
                     activePlayerProjectile = false;
-                    // Update shoot indicator
-                    if (shootIndicator) {
-                        shootIndicator.setText('● SHOOT READY');
-                        shootIndicator.setColor('#00ff00');
-                    }
                 }
                 
                 projectile.destroy();
@@ -875,89 +905,89 @@
                 }
             }
             
-            // Handle projectile hitting boss
+            // Handle projectile hitting boss - UPDATED
             function hitBossWithProjectile(projectile, boss) {
                 try {
-                    // Skip if boss is invalid
-                    if (!boss || !boss.active || !boss.visible) {
-                        // Check if it's a player projectile
+                    // Only proceed if boss is valid and not dying
+                    if (!boss || !boss.active || !boss.visible || boss.getData('dying')) {
+                        console.log('Boss invalid or already dying, ignoring hit');
+                        
+                        // Reset player's projectile if this was a player projectile
                         if (!projectile.getData('type')) {
                             activePlayerProjectile = false;
-                            // Update shoot indicator
-                            if (shootIndicator) {
-                                shootIndicator.setText('● SHOOT READY');
-                                shootIndicator.setColor('#00ff00');
-                            }
                         }
                         
                         projectile.destroy();
                         return;
                     }
-                    
+
                     // Only player projectiles damage the boss
                     if (projectile.getData('type') !== 'boss') {
-                        // Mark this projectile as processed to prevent multiple hits
+                        // Prevent double processing the same projectile
+                        if (projectile.getData('hit_processed')) {
+                            return;
+                        }
+                        
+                        // Mark as processed
                         projectile.setData('hit_processed', true);
                         
-                        // Reset player projectile flag
+                        // Reset player's active projectile flag
                         activePlayerProjectile = false;
                         
-                        // Update shoot indicator
-                        if (shootIndicator) {
-                            shootIndicator.setText('● SHOOT READY');
-                            shootIndicator.setColor('#00ff00');
-                        }
-                        
-                        projectile.destroy();
-                        
-                        // Decrease boss health
-                        bossHealth--;
-                        bossHealthText.setText('Boss: ' + bossHealth);
-                        console.log('Boss hit by projectile! Health: ' + bossHealth);
-                        
-                        // Visual feedback
-                        boss.setTint(0xff0000); // Flash red
-                        
-                        // Reset tint after 100ms
-                        boss.scene.time.delayedCall(100, function() {
-                            if (boss && boss.active) {
-                                boss.clearTint();
-                            }
-                        });
-                        
-                        // Check if boss is defeated
-                        if (bossHealth <= 0) {
-                            bossDeath();
-                        } else {
-                            // Boss gets faster and more aggressive when damaged
-                            if (boss.body) {
-                                // Adjust attack timer to be faster as health decreases
-                                if (bossAttackTimer) {
-                                    bossAttackTimer.remove();
+                        // CRITICAL: Process damage to boss
+                        if (BOSS_CURRENT_HEALTH > 0 && !bossIsHit) {
+                            // Set hit lock to prevent multiple hits in same frame
+                            bossIsHit = true;
+                            
+                            // Decrease boss health
+                            BOSS_CURRENT_HEALTH--;
+                            
+                            console.log(`BOSS HIT! Health decreased to ${BOSS_CURRENT_HEALTH}/${BOSS_MAX_HEALTH}`);
+                            
+                            // Update health display
+                            bossHealthText.setText(`Boss: ${BOSS_CURRENT_HEALTH}/${BOSS_MAX_HEALTH}`);
+                            
+                            // Update health bar
+                            updateBossHealthBar(boss.scene);
+                            
+                            // Visual feedback
+                            boss.setTint(0xff0000);
+                            setTimeout(() => {
+                                bossIsHit = false;  // Reset hit lock after 100ms
+                                if (boss && boss.active) {
+                                    boss.clearTint();
                                 }
-                                
-                                // Make attack frequency based on health - more desperate attacks when low health
-                                const attackDelay = Math.max(800, 2000 - ((10 - bossHealth) * 150));
-                                
-                                bossAttackTimer = boss.scene.time.addEvent({
-                                    delay: attackDelay,
-                                    callback: bossShooting,
-                                    callbackScope: boss.scene,
-                                    loop: true
-                                });
-                                
-                                // Boss gets faster when damaged
-                                const currentVelX = boss.body.velocity.x;
-                                const direction = currentVelX > 0 ? 1 : -1;
-                                const speed = Math.min(200, Math.abs(currentVelX) + 10);
-                                boss.setVelocityX(direction * speed);
+                            }, 100);
+                            
+                            // Update debug text
+                            if (debugText) {
+                                debugText.setText(`Boss hit! Health: ${BOSS_CURRENT_HEALTH}/${BOSS_MAX_HEALTH}`);
                             }
                             
-                            // Boss jumps when hit
-                            if (boss.body && boss.body.touching && boss.body.touching.down) {
-                                boss.setVelocityY(-300);
+                            // Check if boss is defeated
+                            if (BOSS_CURRENT_HEALTH <= 0) {
+                                console.log('BOSS HEALTH REACHED ZERO, TRIGGERING DEATH');
+                                boss.setData('dying', true);
+                                bossDeath();
+                            } else {
+                                // Boss gets more aggressive with each hit
+                                if (boss.body) {
+                                    // Boss gets faster with each hit
+                                    const healthLost = BOSS_MAX_HEALTH - BOSS_CURRENT_HEALTH;
+                                    const speed = Math.min(200, 80 + (healthLost * 10));
+                                    const direction = player.x < boss.x ? -1 : 1;
+                                    boss.setVelocityX(direction * speed);
+                                    
+                                    // Boss jumps if on ground
+                                    if (boss.body.touching.down) {
+                                        boss.setVelocityY(-300);
+                                    }
+                                }
                             }
                         }
+                        
+                        // Destroy the projectile
+                        projectile.destroy();
                     }
                 } catch (error) {
                     console.error('Error in hitBossWithProjectile:', error);
@@ -967,37 +997,74 @@
                 }
             }
             
-            // Boss death function
+            // Boss death function - SIMPLIFIED
             function bossDeath() {
-                boss.setTint(0xff0000);
-                boss.setVelocityX(0);
-                boss.setVelocityY(0);
-                
-                // Stop boss attacks
-                if (bossAttackTimer) {
-                    bossAttackTimer.remove();
-                }
-                
-                // Clear any remaining projectiles
-                projectiles.clear(true, true);
-                
-                // Show win text
-                gameWon = true;
-                winText.setVisible(true);
-                
-                // Flash the boss
-                let flashCount = 0;
-                const flashInterval = setInterval(() => {
-                    boss.setVisible(!boss.visible);
-                    flashCount++;
+                try {
+                    console.log('========= BOSS DEATH FUNCTION CALLED =========');
                     
-                    if (flashCount > 10) {
-                        clearInterval(flashInterval);
-                        boss.destroy();
+                    if (!boss || !boss.active) {
+                        console.log('Boss not available for death sequence');
+                        return;
                     }
-                }, 100);
-                
-                console.log('Boss defeated! You win!');
+                    
+                    // Final check to ensure boss is really dead
+                    if (BOSS_CURRENT_HEALTH > 0) {
+                        console.log(`Boss still has ${BOSS_CURRENT_HEALTH} health, not dying yet`);
+                        return;
+                    }
+                    
+                    console.log('BOSS DEFEATED! Starting death sequence');
+                    
+                    // Mark boss as dying
+                    boss.setData('dying', true);
+                    boss.setTint(0xff0000);
+                    boss.setVelocityX(0);
+                    boss.setVelocityY(0);
+                    
+                    // Stop boss attacks
+                    if (bossAttackTimer) {
+                        bossAttackTimer.remove();
+                    }
+                    
+                    // Remove all projectiles
+                    projectiles.clear(true, true);
+                    
+                    // Show win text
+                    gameWon = true;
+                    winText.setVisible(true);
+                    
+                    // Hide health displays
+                    bossHealthText.setVisible(false);
+                    bossHealthDisplay.setVisible(false);
+                    
+                    // Update debug text
+                    if (debugText) {
+                        debugText.setText('BOSS DEFEATED! You win!');
+                    }
+                    
+                    // Flash the boss
+                    let flashCount = 0;
+                    const flashInterval = setInterval(() => {
+                        if (boss && boss.active) {
+                            boss.setVisible(!boss.visible);
+                            flashCount++;
+                            
+                            if (flashCount > 10) {
+                                clearInterval(flashInterval);
+                                boss.destroy();
+                            }
+                        } else {
+                            clearInterval(flashInterval);
+                        }
+                    }, 150);
+                    
+                    console.log('========= BOSS DEATH SEQUENCE STARTED =========');
+                } catch (error) {
+                    console.error('Error in bossDeath:', error);
+                    if (debugText) {
+                        debugText.setText('Error in boss death: ' + error.message);
+                    }
+                }
             }
             
             // Handle collision with enemies
@@ -1054,42 +1121,168 @@
                     gameOver = true;
                     player.setTint(0xff0000);
                     console.log('Game over!');
+                    showGameOver(player.scene);
+                }
+            }
+            
+            // NEW: Show game over screen with animation
+            function showGameOver(scene) {
+                try {
+                    console.log('Showing game over screen');
+                    
+                    // Stop all movement and attacks
+                    if (player && player.body) {
+                        player.setVelocityX(0);
+                        player.setVelocityY(0);
+                    }
+                    
+                    // Remove all boss attack timers
+                    if (bossAttackTimer) {
+                        bossAttackTimer.remove();
+                    }
+                    
+                    // Access game over elements from the scene
+                    const [overlay, gameOverText, retry] = scene.gameOverElements;
+                    
+                    // Show overlay with fade-in animation
+                    overlay.setVisible(true);
+                    
+                    // Animate opacity of overlay
+                    scene.tweens.add({
+                        targets: overlay,
+                        fillAlpha: { from: 0, to: 0.7 },
+                        duration: 1000,
+                        onComplete: () => {
+                            // Show game over text and retry button
+                            gameOverText.setVisible(true);
+                            retry.setVisible(true);
+                            
+                            // Add pulsing animation to retry button
+                            scene.tweens.add({
+                                targets: retry,
+                                scale: { from: 1, to: 1.1 },
+                                duration: 500,
+                                yoyo: true,
+                                repeat: -1
+                            });
+                        }
+                    });
+                    
+                    // Update debug text
+                    if (debugText) {
+                        debugText.setText('Game over! Click RETRY to restart');
+                    }
+                    
+                } catch (error) {
+                    console.error('Error showing game over screen:', error);
+                    if (debugText) {
+                        debugText.setText('Error showing game over: ' + error.message);
+                    }
+                }
+            }
+            
+            // NEW: Restart game function
+            function restartGame(scene) {
+                try {
+                    console.log('Restarting game...');
+                    
+                    // Reset game state
+                    gameOver = false;
+                    health = 5;
+                    currentScreen = 1;
+                    BOSS_CURRENT_HEALTH = BOSS_MAX_HEALTH;
+                    activePlayerProjectile = false;
+                    gameWon = false;
+                    
+                    // Hide game over elements
+                    scene.gameOverElements.forEach(element => element.setVisible(false));
+                    
+                    // Reset player
+                    if (player) {
+                        player.x = 100;
+                        player.y = 300;
+                        player.clearTint();
+                        player.alpha = 1;
+                        player.setVelocityX(0);
+                        player.setVelocityY(0);
+                    }
+                    
+                    // Reset boss
+                    if (boss) {
+                        boss.setVisible(false);
+                        boss.setActive(false);
+                        boss.clearTint();
+                    }
+                    
+                    // Hide boss health displays
+                    if (bossHealthText) bossHealthText.setVisible(false);
+                    if (bossHealthDisplay) bossHealthDisplay.setVisible(false);
+                    
+                    // Hide win text
+                    if (winText) winText.setVisible(false);
+                    
+                    // Update health display
+                    if (healthText) healthText.setText('Health: ' + health);
+                    
+                    // Update screen display
+                    if (currentScreenText) {
+                        currentScreenText.setText('Screen: ' + currentScreen + '/' + totalScreens);
+                    }
+                    
+                    // Clear existing enemies and projectiles
+                    if (enemies) enemies.clear(true, true);
+                    if (projectiles) projectiles.clear(true, true);
+                    
+                    // Spawn new enemies for the first screen
+                    spawnEnemies(scene);
+                    
+                    // Update debug text
+                    if (debugText) {
+                        debugText.setText('Game restarted');
+                    }
+                    
+                    console.log('Game successfully restarted');
+                } catch (error) {
+                    console.error('Error restarting game:', error);
+                    if (debugText) {
+                        debugText.setText('Error restarting game: ' + error.message);
+                    }
                 }
             }
             
             // Create placeholder textures function
             function createPlaceholderTextures(scene) {
                 try {
-                    console.log('Creating placeholder textures');
-                    
-                    // Platform texture (brown rectangle)
-                    const platformGraphics = scene.make.graphics({x: 0, y: 0, add: false});
-                    platformGraphics.fillStyle(0x8B4513, 1); // Brown color
-                    platformGraphics.fillRect(0, 0, 200, 32);
-                    platformGraphics.generateTexture('platform', 200, 32);
-                    
+                console.log('Creating placeholder textures');
+                
+                // Platform texture (brown rectangle)
+                const platformGraphics = scene.make.graphics({x: 0, y: 0, add: false});
+                platformGraphics.fillStyle(0x8B4513, 1); // Brown color
+                platformGraphics.fillRect(0, 0, 200, 32);
+                platformGraphics.generateTexture('platform', 200, 32);
+                
                     // Player texture (yellow rectangle with eyes)
-                    const playerGraphics = scene.make.graphics({x: 0, y: 0, add: false});
-                    
+                const playerGraphics = scene.make.graphics({x: 0, y: 0, add: false});
+                
                     // Normal state
-                    playerGraphics.fillStyle(0xFFD700, 1); // Gold color
-                    playerGraphics.fillRect(0, 0, 32, 48);
-                    playerGraphics.fillStyle(0x000000, 1); // Black for eyes
-                    playerGraphics.fillRect(8, 12, 4, 4);
-                    playerGraphics.fillRect(20, 12, 4, 4);
-                    playerGraphics.strokeRect(0, 0, 32, 48);
+                playerGraphics.fillStyle(0xFFD700, 1); // Gold color
+                playerGraphics.fillRect(0, 0, 32, 48);
+                playerGraphics.fillStyle(0x000000, 1); // Black for eyes
+                playerGraphics.fillRect(8, 12, 4, 4);
+                playerGraphics.fillRect(20, 12, 4, 4);
+                playerGraphics.strokeRect(0, 0, 32, 48);
                     playerGraphics.generateTexture('player', 32, 48);
-                    
+                
                     // Attack state
-                    playerGraphics.clear();
+                playerGraphics.clear();
                     playerGraphics.fillStyle(0xFFD700, 1); // Gold color
-                    playerGraphics.fillRect(0, 0, 32, 48);
+                playerGraphics.fillRect(0, 0, 32, 48);
                     playerGraphics.fillStyle(0x000000, 1); // Black for eyes
                     playerGraphics.fillRect(8, 12, 4, 4);
                     playerGraphics.fillRect(20, 12, 4, 4);
                     playerGraphics.fillStyle(0xFF0000, 1); // Red for attack
                     playerGraphics.fillRect(32, 20, 16, 8); // Attack area
-                    playerGraphics.strokeRect(0, 0, 32, 48);
+                playerGraphics.strokeRect(0, 0, 32, 48);
                     playerGraphics.generateTexture('player_attack', 48, 48);
                     
                     // Projectile texture (green circle)
@@ -1104,39 +1297,39 @@
                     bossProjectileGraphics.fillCircle(8, 8, 8);
                     bossProjectileGraphics.generateTexture('boss_projectile', 16, 16);
                     
-                    // Red rat
-                    const redRatGraphics = scene.make.graphics({x: 0, y: 0, add: false});
-                    redRatGraphics.fillStyle(0xFF0000, 1);
-                    redRatGraphics.fillCircle(16, 16, 16);
+                // Red rat
+                const redRatGraphics = scene.make.graphics({x: 0, y: 0, add: false});
+                redRatGraphics.fillStyle(0xFF0000, 1);
+                redRatGraphics.fillCircle(16, 16, 16);
                     // Add angry eyes for chase state
                     redRatGraphics.fillStyle(0x000000, 1);
                     redRatGraphics.fillRect(10, 10, 4, 4);
                     redRatGraphics.fillRect(18, 10, 4, 4);
-                    redRatGraphics.generateTexture('rat_red', 32, 32);
-                    
-                    // Blue rat
-                    const blueRatGraphics = scene.make.graphics({x: 0, y: 0, add: false});
-                    blueRatGraphics.fillStyle(0x0000FF, 1);
-                    blueRatGraphics.fillCircle(16, 16, 16);
+                redRatGraphics.generateTexture('rat_red', 32, 32);
+                
+                // Blue rat
+                const blueRatGraphics = scene.make.graphics({x: 0, y: 0, add: false});
+                blueRatGraphics.fillStyle(0x0000FF, 1);
+                blueRatGraphics.fillCircle(16, 16, 16);
                     // Add angry eyes for chase state
                     blueRatGraphics.fillStyle(0x000000, 1);
                     blueRatGraphics.fillRect(10, 10, 4, 4);
                     blueRatGraphics.fillRect(18, 10, 4, 4);
-                    blueRatGraphics.generateTexture('rat_blue', 32, 32);
-                    
-                    // Boss
-                    const bossGraphics = scene.make.graphics({x: 0, y: 0, add: false});
-                    bossGraphics.fillStyle(0x800080, 1); // Purple
-                    bossGraphics.fillRect(0, 0, 64, 64);
+                blueRatGraphics.generateTexture('rat_blue', 32, 32);
+                
+                // Boss
+                const bossGraphics = scene.make.graphics({x: 0, y: 0, add: false});
+                bossGraphics.fillStyle(0x800080, 1); // Purple
+                bossGraphics.fillRect(0, 0, 64, 64);
                     bossGraphics.fillStyle(0xFFFF00, 1); // Yellow eyes
-                    bossGraphics.fillRect(10, 10, 10, 10);
-                    bossGraphics.fillRect(44, 10, 10, 10);
+                bossGraphics.fillRect(10, 10, 10, 10);
+                bossGraphics.fillRect(44, 10, 10, 10);
                     // Add angry eyebrows
                     bossGraphics.fillStyle(0x000000, 1);
                     bossGraphics.fillRect(8, 6, 14, 3);
                     bossGraphics.fillRect(42, 6, 14, 3);
-                    bossGraphics.generateTexture('boss', 64, 64);
-                    
+                bossGraphics.generateTexture('boss', 64, 64);
+                
                     console.log('All textures created successfully');
                 } catch (error) {
                     console.error('Error creating textures:', error);
